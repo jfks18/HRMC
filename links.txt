@@ -1,0 +1,126 @@
+c:\Users\jfk\Desktop\React\gwchmo\api/
+  - timeLogApi.js
+c:\Users\jfk\Desktop\React\gwchmo\public/
+  - file.svg
+  - globe.svg
+  - next.svg
+  - vercel.svg
+  - window.svg
+c:\Users\jfk\Desktop\React\gwchmo\src\app/
+  - addBootstrap.tsx
+  - apiFetch.ts
+  - favicon.ico
+  - globals.css
+  - layout.tsx
+  - LoginForm.tsx
+  - navConfig.ts
+  - page.module.css
+  - page.tsx
+  admin/
+    - layout.tsx
+    attendance/
+      - page.tsx
+      components/
+        - AttendanceSearchFilter.tsx
+        - AttendanceStatsCards.tsx
+        - AttendanceTable.tsx
+    certificates/
+      - page.tsx
+      components/
+        - CertificatesSearchFilter.tsx
+        - CertificatesStatsCards.tsx
+        - CertificatesTable.tsx
+    dashboard/
+      - page.tsx
+    evaluation/
+      - page.tsx
+      components/
+        - EvaluationSearchFilter.tsx
+        - EvaluationStatsCards.tsx
+        - EvaluationTable.tsx
+    leave/
+      - page.tsx
+      components/
+        - LeaveSearchFilter.tsx
+        - LeaveTable.tsx
+    users/
+      - page.tsx
+      - userstable.tsx
+  components/
+    - AdminAuthGuard.tsx
+    - DeanAuthGuard.tsx
+    - FacultyAuthGuard.tsx
+    - GlobalModal.tsx
+    - GlobalSearchFilter.tsx
+    - InteractiveCard.tsx
+    - SearchFilterProps.ts
+    - SideNav.tsx
+    - StaffAuthGuard.tsx
+    - supcard.tsx
+    - Table.tsx
+    - TopBar.tsx
+    DashboardCard/
+      - DashboardCard.tsx
+  dean/
+    - layout.tsx
+    attendance/
+      - attendancetable.tsx
+      - page.tsx
+    components/
+      - SideNav.tsx
+    dashboard/
+      - page.tsx
+    dean-certificate/
+      - deancertificatetable.tsx
+      - page.tsx
+    faculty-evaluation/
+      - facultyevaluationtable.tsx
+      - page.tsx
+    leave/
+      - leavetable.tsx
+      - page.tsx
+      components/
+        - LeaveTable.tsx
+    leave-management/
+      - leavemanagementtable.tsx
+    modals/
+      - editmodal.tsx
+      - warningmodal.tsx
+  evaluation/
+    - auth.tsx
+    - form.tsx
+    - page.tsx
+  faculty/
+    - layout.tsx
+    attendance/
+      - attendancetable.tsx
+      - page.tsx
+    certificate-management/
+      - certificatestable.tsx
+      - page.tsx
+    components/
+      - SideNav.tsx
+    dashboard/
+      - page.tsx
+    leave-management/
+      - leavetable.tsx
+      - page.tsx
+  staff/
+    - layout.tsx
+    attendance/
+      - attendancetable.tsx
+      - page.tsx
+    certificate-management/
+      - certificatestable.tsx
+      - page.tsx
+    components/
+      - SideNav.tsx
+    dashboard/
+      - page.tsx
+    leave-management/
+      - leavetable.tsx
+      - page.tsx
+  timekeeper/
+    - page.tsx
+    - TimekeeperClient.tsx
+    - UserLogsTable.tsx
