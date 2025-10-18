@@ -4,14 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const navItems = [
-  { label: 'Dashboard', icon: 'bi-grid', href: NGROK_BASE + '/dean/dashboard'},
-  { label: 'Time Tracking', icon: 'bi-clock-history', href: NGROK_BASE + '/dean/attendance' },
-  { label: 'Leave Management', icon: 'bi-calendar-check', href: NGROK_BASE + '/dean/leave' },
-  { label: 'Faculty Evaluation', icon: 'bi-star', href: NGROK_BASE + '/dean/faculty-evaluation' },
-  { label: 'Certificates', icon: 'bi-file-earmark-text', href: NGROK_BASE + '/dean/dean-certificate' },
-];
-
-const navItems = [
   { label: 'Dashboard', icon: 'bi-grid', href: '/dean/dashboard'},
   { label: 'Time Tracking', icon: 'bi-clock-history', href: '/dean/attendance' },
   { label: 'Leave Management', icon: 'bi-calendar-check', href: '/dean/leave' },

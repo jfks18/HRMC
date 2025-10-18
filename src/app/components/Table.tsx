@@ -25,12 +25,16 @@ export function Table<T>({ columns, data}: TableProps<T>) {
                 <tbody>
                     {data.map((row, idx) => (
                         <tr key={idx}>
-                            {columns.map(col => (
-                                <td key={String(col.key)}>
-                                    {col.render ? col.render(row[col.key], row) : row[col.key]}
-
-                                </td>
-                            ))}
+                            {columns.map(col => {
+                                const cell: React.ReactNode = col.render
+                                    ? col.render(row[col.key as keyof T], row)
+                                    : (row[col.key] as unknown as React.ReactNode);
+                                return (
+                                    <td key={String(col.key)}>
+                                        {cell}
+                                    </td>
+                                );
+                            })}
                         </tr>
                     ))}
                 </tbody>
