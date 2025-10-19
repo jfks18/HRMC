@@ -24,6 +24,7 @@ export default function ChatWidget() {
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [dms, setDms] = useState<Array<{ room: string; other: string; last_at?: string; msg_count?: number }>>([]);
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
+  const activeRoomRef = useRef<string | null>(activeRoom);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [typingUser, setTypingUser] = useState<User | null>(null);
@@ -72,7 +73,7 @@ export default function ChatWidget() {
 
     client.on('new_message', (m: Message) => {
       // if message belongs to active room append, otherwise ignore (could update dm list badge)
-      if (m.room === activeRoom) setMessages(prev => [...prev, m]);
+      if (m.room === activeRoomRef.current) setMessages(prev => [...prev, m]);
       // update DM listing (simple refresh)
       fetchDms(client);
     });
@@ -93,6 +94,11 @@ export default function ChatWidget() {
   useEffect(() => { // scroll to bottom when messages change
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  // keep a ref in-sync so socket handlers have latest activeRoom without recreating listeners
+  useEffect(() => {
+    activeRoomRef.current = activeRoom;
+  }, [activeRoom]);
 
   async function fetchDms(client?: Socket) {
     try {
