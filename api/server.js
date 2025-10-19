@@ -2440,14 +2440,17 @@ app.delete('/users/:id', (req, res) => {
     return res.status(400).json({ error: 'Missing or invalid user id', userId });
   }
   userId = userId.trim();
-  db.promise().query('DELETE FROM users WHERE id = ?', [userId], (err, result) => {
+
+  // Use the callback-based db.query API here to ensure the callback receives (err, result)
+  db.query('DELETE FROM users WHERE id = ?', [userId], (err, result) => {
     if (err) {
+      console.error('Error deleting user:', err, 'userId:', userId);
       return res.status(500).json({ error: 'Database delete error', details: err, userId });
     }
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'User not found', userId });
     }
-    res.json({ message: 'User deleted successfully', userId });
+    return res.json({ message: 'User deleted successfully', userId });
   });
 });
 
