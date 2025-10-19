@@ -7,23 +7,14 @@ type Message = { id?: number | null; room: string; sender_id?: string | null; se
 
 // Resolve socket server URL:
 // - Prefer NEXT_PUBLIC_SOCKET_URL when provided
-// - Allow runtime override via window.__NGROK_URL (dev only)
-// - Only fallback to the hardcoded ngrok URL in development builds
+// - Otherwise hardcode the ngrok URL you requested so the client always connects there in dev
 const SOCKET_URL = (() => {
-  // explicit env overrides everything
+  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_SOCKET_URL || 'https://buck-leading-pipefish.ngrok-free.app';
   if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL;
-
-  // runtime dev override via devtools
-  if (typeof window !== 'undefined') {
-    // @ts-ignore
-    if (typeof window.__NGROK_URL === 'string' && window.__NGROK_URL) return window.__NGROK_URL;
-  }
-
-  // In development, keep the existing ngrok fallback for convenience
-  if (process.env.NODE_ENV === 'development') return 'https://buck-leading-pipefish.ngrok-free.app';
-
-  // In production don't assume ngrok; return empty so client uses configured BACKEND/NEXT_PUBLIC variables
-  return '';
+  // runtime override via devtools: window.__NGROK_URL
+  // @ts-ignore
+  if (typeof window.__NGROK_URL === 'string' && window.__NGROK_URL) return window.__NGROK_URL;
+  return 'https://buck-leading-pipefish.ngrok-free.app';
 })();
 
 export default function ChatWidget() {
