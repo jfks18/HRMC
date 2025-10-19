@@ -28,6 +28,17 @@ function formatDate(dateString: string) {
   });
 }
 
+// Compute inclusive days between two dates (start and end). Returns number or '-' if invalid.
+function computeDays(start?: string, end?: string, fallback?: number | null) {
+  if (!start || !end) return (typeof fallback === 'number' ? fallback : '-');
+  const s = new Date(start);
+  const e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return (typeof fallback === 'number' ? fallback : '-');
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const diff = Math.floor((Date.UTC(e.getFullYear(), e.getMonth(), e.getDate()) - Date.UTC(s.getFullYear(), s.getMonth(), s.getDate())) / msPerDay) + 1;
+  return diff >= 0 ? diff : (typeof fallback === 'number' ? fallback : '-');
+}
+
 function getStatusBadge(status: string) {
   const statusClasses = {
     pending: 'bg-warning text-dark',      // Yellow with dark text
@@ -68,6 +79,8 @@ export default function LeaveTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
+  const [processingIds, setProcessingIds] = useState<number[]>([]);
 
   const filters = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
 
@@ -120,12 +133,14 @@ export default function LeaveTable() {
 
   // Handle approve leave request
   const handleApproveRequest = async (requestId: number) => {
+    if (processingIds.includes(requestId)) return; // already processing
     if (!confirm(`Are you sure you want to approve leave request #${requestId}?`)) {
       return;
     }
 
+    setProcessingIds(prev => prev.includes(requestId) ? prev : [...prev, requestId]);
     try {
-      const response = await apiFetch(`/api/proxy/leave_request/${requestId}/approve`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' } });
+      const response = await apiFetch(`/api/proxy/leave_request/${requestId}/approve`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_approve: 1 }) });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: Failed to approve leave request`);
@@ -135,7 +150,7 @@ export default function LeaveTable() {
       setLeaveRequests(prevRequests => 
         prevRequests.map(request => 
           request.id === requestId 
-            ? { ...request, status: 'approved' }
+            ? { ...request, status: 'approved', is_approve: 1 }
             : request
         )
       );
@@ -146,17 +161,22 @@ export default function LeaveTable() {
     } catch (err: any) {
       console.error('Error approving leave request:', err);
       showToast(`Failed to approve leave request: ${err.message || 'Unknown error'}`, 'danger');
+    } finally {
+      setProcessingIds(prev => prev.filter(id => id !== requestId));
     }
   };
 
   // Handle reject leave request
   const handleRejectRequest = async (requestId: number) => {
+    if (processingIds.includes(requestId)) return; // already processing
     if (!confirm(`Are you sure you want to reject leave request #${requestId}?`)) {
       return;
     }
 
+    setProcessingIds(prev => prev.includes(requestId) ? prev : [...prev, requestId]);
     try {
-      const response = await apiFetch(`/api/proxy/leave_request/${requestId}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' } });
+      // Call the dedicated disapprove endpoint
+      const response = await apiFetch(`/api/proxy/leave_request/${requestId}/disapprove`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' } });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: Failed to reject leave request`);
@@ -166,7 +186,7 @@ export default function LeaveTable() {
       setLeaveRequests(prevRequests => 
         prevRequests.map(request => 
           request.id === requestId 
-            ? { ...request, status: 'rejected' }
+            ? { ...request, status: 'rejected', is_approve: 0 }
             : request
         )
       );
@@ -177,15 +197,19 @@ export default function LeaveTable() {
     } catch (err: any) {
       console.error('Error rejecting leave request:', err);
       showToast(`Failed to reject leave request: ${err.message || 'Unknown error'}`, 'danger');
+    } finally {
+      setProcessingIds(prev => prev.filter(id => id !== requestId));
     }
   };
 
   // Handle cancel leave request (only for dean's own requests)
   const handleCancelRequest = async (requestId: number) => {
+    if (processingIds.includes(requestId)) return; // already processing
     if (!confirm(`Are you sure you want to cancel leave request #${requestId}?`)) {
       return;
     }
 
+    setProcessingIds(prev => prev.includes(requestId) ? prev : [...prev, requestId]);
     try {
       const response = await apiFetch(`/api/proxy/leave_request/${requestId}/cancel`, {
         method: 'PATCH',
@@ -213,6 +237,8 @@ export default function LeaveTable() {
     } catch (err: any) {
       console.error('Error cancelling leave request:', err);
       showToast(`Failed to cancel leave request: ${err.message || 'Unknown error'}`, 'danger');
+    } finally {
+      setProcessingIds(prev => prev.filter(id => id !== requestId));
     }
   };
 
@@ -254,8 +280,12 @@ export default function LeaveTable() {
   };
 
   const columns: TableColumn<LeaveRequest>[] = [
-    { key: 'id', header: 'Request ID' },
-    { key: 'user_name', header: 'Employee' },
+    { key: 'user_name', header: 'Employee', render: (_v, row) => (
+      <div>
+        <div className="fw-semibold">{(row as any).user_name || (row as any).employee_name || String(row.user_id)}</div>
+        <div className="text-muted small">ID: {row.user_id}</div>
+      </div>
+    ) },
     { 
       key: 'type', 
       header: 'Leave Type',
@@ -271,7 +301,7 @@ export default function LeaveTable() {
       header: 'End Date',
       render: (value) => formatDate(value)
     },
-    { key: 'days', header: 'Days' },
+  { key: 'days', header: 'Days', render: (value, row) => computeDays(row.start_date, row.end_date, (row as any).days) },
     { 
       key: 'reason', 
       header: 'Reason',
@@ -290,8 +320,8 @@ export default function LeaveTable() {
       key: 'actions' as keyof LeaveRequest,
       header: 'Actions',
       render: (_value: any, row: LeaveRequest) => {
-        const isOwnRequest = currentUserId && row.user_id.toString() === currentUserId.toString();
-        const isPending = !row.status || row.status === 'pending';
+  const isOwnRequest = currentUserId && String(row.user_id) === String(currentUserId);
+    const isPending = !row.status || row.status === 'pending';
         
         // Debug logging to help troubleshoot
         console.log('Action buttons debug:', {
@@ -305,16 +335,13 @@ export default function LeaveTable() {
         
         return (
           <div className="d-flex gap-1">
-            <button
-              className="btn btn-sm btn-outline-primary"
-              onClick={() => {
-                alert(`View details for leave request #${row.id}`);
-                // You can implement a view details modal here
-              }}
-              title="View Details"
-            >
-              <i className="bi bi-eye"></i>
-            </button>
+                <button
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => setSelectedLeave(row)}
+                  title="View Details"
+                >
+                  <i className="bi bi-eye"></i>
+                </button>
             
             {isPending && isOwnRequest && (
               // Dean can cancel their own pending requests
@@ -352,14 +379,56 @@ export default function LeaveTable() {
     }
   ];
 
+  // Render details modal for dean (approve/reject from modal)
+  const renderDetailsModal = () => {
+    if (!selectedLeave) return null;
+    const s = selectedLeave;
+    return (
+      <div className="modal show d-block" tabIndex={-1}>
+        <div className="modal-dialog modal-md">
+          <div className="modal-content">
+            <div className="modal-header bg-primary text-white">
+              <h5 className="modal-title">Leave Request Details</h5>
+              <button type="button" className="btn-close btn-close-white" onClick={() => setSelectedLeave(null)}></button>
+            </div>
+            <div className="modal-body">
+              <div className="row">
+                <div className="col-6"><strong>Employee</strong><div>{s.user_name || (s as any).employee_name || String(s.user_id)}</div></div>
+                <div className="col-6 mt-3"><strong>Type</strong><div>{s.type}</div></div>
+                <div className="col-6 mt-3"><strong>Start Date</strong><div>{formatDate(s.start_date)}</div></div>
+                <div className="col-6 mt-3"><strong>End Date</strong><div>{formatDate(s.end_date)}</div></div>
+                <div className="col-12 mt-3"><strong>Days</strong><div>{s.days}</div></div>
+                <div className="col-12 mt-3"><strong>Reason</strong><div>{s.reason}</div></div>
+                <div className="col-12 mt-3"><strong>Status</strong><div>{s.status || 'pending'}</div></div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <div className="me-auto">
+                {(!s.status || s.status === 'pending') && String(s.user_id) !== String(currentUserId) && (
+                  <>
+                    <button className="btn btn-success me-2" onClick={() => { handleApproveRequest(s.id); setSelectedLeave(null); }}>Approve</button>
+                    <button className="btn btn-danger me-2" onClick={() => { handleRejectRequest(s.id); setSelectedLeave(null); }}>Reject</button>
+                  </>
+                )}
+              </div>
+              <button type="button" className="btn btn-secondary" onClick={() => setSelectedLeave(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Filter leave requests based on search and filter
   const filteredRequests = leaveRequests.filter(request => {
+    const s = (search || '').toString();
+    const lowerS = s.toLowerCase();
     const matchesSearch = 
-      request.id.toString().includes(search.toLowerCase()) ||
-      (request.user_name || '').toLowerCase().includes(search.toLowerCase()) ||
-      request.type.toLowerCase().includes(search.toLowerCase()) ||
-      request.reason.toLowerCase().includes(search.toLowerCase()) ||
-      (request.status || 'pending').toLowerCase().includes(search.toLowerCase());
+      String(request.id).includes(s) ||
+      (String(request.user_name || '')).toLowerCase().includes(lowerS) ||
+      String(request.type || '').toLowerCase().includes(lowerS) ||
+      String(request.reason || '').toLowerCase().includes(lowerS) ||
+      (String(request.status || 'pending')).toLowerCase().includes(lowerS);
     
     const matchesFilter = 
       filter === 'All' || 
@@ -396,6 +465,7 @@ export default function LeaveTable() {
   }
 
   return (
+    <>
     <div className="card">
       <div className="card-body">
         <div className="d-flex justify-content-between align-items-center mb-3">
@@ -421,5 +491,7 @@ export default function LeaveTable() {
         )}
       </div>
     </div>
+    {renderDetailsModal()}
+    </>
   );
 }

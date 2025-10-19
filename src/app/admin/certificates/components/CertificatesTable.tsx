@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../../apiFetch';
 import CertificateStatusBadge from '../../../components/CertificateStatusBadge';
 import CertificateUploadModal from './CertificateUploadModal';
+import CertificateRequestForm from '../../../components/CertificateRequestForm';
 
 interface CertificateRequest {
   id: number;
@@ -24,10 +25,18 @@ export default function CertificatesTable() {
   const [requests, setRequests] = useState<CertificateRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<CertificateRequest | null>(null);
 
   useEffect(() => {
     fetchCertificateRequests();
+  }, []);
+
+  // Listen for page-level requests to open the create modal
+  useEffect(() => {
+    const handler = () => setCreateModalOpen(true);
+    window.addEventListener('openCertificateCreate', handler as EventListener);
+    return () => window.removeEventListener('openCertificateCreate', handler as EventListener);
   }, []);
 
   const fetchCertificateRequests = async () => {
@@ -120,7 +129,17 @@ export default function CertificatesTable() {
               <i className="bi bi-award me-2"></i>
               Certificate Requests
             </h5>
-            <span className="badge bg-primary">{requests.length} Total</span>
+            <div className="d-flex align-items-center gap-3">
+              <button
+                className="btn btn-outline-primary btn-sm"
+                onClick={() => setCreateModalOpen(true)}
+                title="Create Certificate Request"
+              >
+                <i className="bi bi-plus-circle me-1"></i>
+                New Request
+              </button>
+              <span className="badge bg-primary">{requests.length} Total</span>
+            </div>
           </div>
 
           {requests.length === 0 ? (
@@ -304,6 +323,15 @@ export default function CertificatesTable() {
         }}
         certificateRequest={selectedRequest}
         onSuccess={handleUploadSuccess}
+      />
+
+      <CertificateRequestForm
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={() => {
+          setCreateModalOpen(false);
+          fetchCertificateRequests();
+        }}
       />
     </>
   );

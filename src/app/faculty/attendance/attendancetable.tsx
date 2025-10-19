@@ -4,14 +4,28 @@ import { apiFetch } from '../../apiFetch';
 import { Table, TableColumn } from '../../components/Table';
 import GlobalSearchFilter from '../../components/GlobalSearchFilter';
 
-interface EvaluationRecord {
-  id: number;
-  teacher_id: string;
-  expires_at: string;
-  password: string;
+interface AttendanceRecord {
+  id?: number;
+  user_id: number | string;
+  time_in?: string;
+  time_out?: string;
+  status?: string;
+  late_minutes?: number;
+  date?: string;
 }
 
-function formatDateToWords(dateStr: string) {
+function formatTo12Hour(time?: string) {
+  if (!time) return '';
+  const [hourStr, minuteStr] = time.split(':');
+  let hour = parseInt(hourStr, 10);
+  const minute = minuteStr;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  return `${hour}:${minute} ${ampm}`;
+}
+
+function formatDateToWords(dateStr?: string) {
   if (!dateStr) return '';
   const date = new Date(dateStr);
   return date.toLocaleDateString('en-US', {
@@ -19,124 +33,107 @@ function formatDateToWords(dateStr: string) {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
   });
 }
 
-const columns: TableColumn<EvaluationRecord>[] = [
-  { key: 'id', header: 'Evaluation ID' },
-  { key: 'teacher_id', header: 'Teacher ID' },
-  { key: 'expires_at', header: 'Expires At', render: (value) => formatDateToWords(value) },
-  { key: 'password', header: 'Password' },
-  {
-    key: 'actions' as keyof EvaluationRecord,
-    header: 'Actions',
-    render: (_value, row) => (
-      <div className="d-flex gap-2">
-        <button 
-          className="btn btn-sm btn-primary" 
-          onClick={() => {
-            // You can add view evaluation logic here
-            console.log('View evaluation:', row.id);
-          }}
-        >
-          View Details
-        </button>
-        <button 
-          className="btn btn-sm btn-success" 
-          onClick={() => {
-            // Copy password to clipboard
-            navigator.clipboard.writeText(row.password);
-            alert('Password copied to clipboard!');
-          }}
-        >
-          Copy Password
-        </button>
-      </div>
-    )
-  }
+function getStatusBadge(status?: string) {
+  const statusClasses: Record<string, string> = {
+    present: 'bg-success',
+    absent: 'bg-danger',
+    late: 'bg-warning text-dark',
+    'on leave': 'bg-info'
+  };
+  return (
+    <span className={`badge ${statusClasses[status?.toLowerCase() || ''] || 'bg-secondary'}`}>
+      {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}
+    </span>
+  );
+}
+
+const columns: TableColumn<AttendanceRecord>[] = [
+  { key: 'user_name' as keyof AttendanceRecord, header: 'Name' },
+  { key: 'date', header: 'Date', render: (value) => formatDateToWords(value) },
+  { key: 'time_in', header: 'Time In', render: (value) => value ? formatTo12Hour(value) : 'N/A' },
+  { key: 'time_out', header: 'Time Out', render: (value) => value ? formatTo12Hour(value) : 'Not yet' },
+  { key: 'status', header: 'Status', render: (value) => getStatusBadge(value) },
+  { key: 'late_minutes', header: 'Late Minutes', render: (value) => value && value > 0 ? `${value} min` : '-' }
 ];
 
 export default function AttendanceTable() {
-  const [records, setRecords] = useState<EvaluationRecord[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [userId, setUserId] = useState<string | null>(null);
-  
-  // You can add filters based on your evaluation data
-  const filters = ['Active', 'Expired'];
 
-  // Get user ID from localStorage
+  const filters = ['All', 'Present', 'Absent', 'Late', 'On Leave'];
+
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedUserId = localStorage.getItem('userId');
-      console.log('Retrieved user ID from localStorage:', storedUserId);
-      setUserId(storedUserId);
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    if (!userId) {
+      setRecords([]);
+      setLoading(false);
+      setError('User not logged in');
+      return;
     }
-  }, []);
 
-  // Fetch evaluations for the logged-in user
-  useEffect(() => {
-    if (!userId) return;
-    
-    const fetchEvaluations = async () => {
+    const fetchAttendance = async () => {
       setLoading(true);
       setError('');
-      
       try {
-        console.log('Fetching evaluations for user ID:', userId);
-        
-        const response = await apiFetch(`/api/proxy/evaluation/user/${userId}`, { headers: { 'Content-Type': 'application/json' } });
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            setRecords([]);
-            setError('No evaluations found for your account');
-            return;
-          }
-          throw new Error(`HTTP ${response.status}: Failed to fetch evaluations`);
-        }
-        
+        const response = await apiFetch('/api/proxy/attendance', { headers: { 'Content-Type': 'application/json' } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to fetch attendance`);
         const data = await response.json();
-        console.log('Fetched evaluations:', data);
-        setRecords(data);
-        setError('');
-        
+        // Filter to logged-in user's records
+        const userRecords = data.filter((r: AttendanceRecord) => String(r.user_id) === String(userId));
+        setRecords(userRecords);
+
+        // backend now provides user_name in attendance rows
       } catch (err: any) {
-        console.error('Error fetching evaluations:', err);
-        setError(err.message || 'Failed to load evaluations');
+        console.error('Error fetching attendance data:', err);
+        setError(err.message || 'Failed to load attendance');
         setRecords([]);
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchEvaluations();
-  }, [userId]);
+
+    fetchAttendance();
+  }, []);
 
   const filteredRecords = records.filter(record => {
     const matchesSearch =
-      record.id.toString().includes(search) ||
-      record.teacher_id.toLowerCase().includes(search.toLowerCase()) ||
-      record.password.toLowerCase().includes(search.toLowerCase());
-    
-    const matchesFilter = filter ? 
-      (filter === 'Active' ? new Date(record.expires_at) > new Date() : 
-       filter === 'Expired' ? new Date(record.expires_at) <= new Date() : true) : true;
-    
+      (record.date || '').toLowerCase().includes(search.toLowerCase()) ||
+      (record.status || '').toLowerCase().includes(search.toLowerCase()) ||
+      (String(record.user_id) || '').includes(search) ||
+      (String((record as any).user_name) || '').toLowerCase().includes(search.toLowerCase());
+
+    const matchesFilter =
+      !filter || filter === 'All' || (record.status || '').toLowerCase() === filter.toLowerCase();
+
     return matchesSearch && matchesFilter;
   });
 
-  if (!userId) {
+  if (loading) {
     return (
       <div className="card">
-        <div className="card-body">
-          <div className="alert alert-warning">
+        <div className="card-body text-center">
+          <div className="spinner-border" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="mt-2">Loading attendance records...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && records.length === 0) {
+    return (
+      <div className="card">
+        <div className="card-body text-center">
+          <div className="alert alert-warning" role="alert">
             <i className="bi bi-exclamation-triangle me-2"></i>
-            User not logged in. Please login to view your evaluations.
+            {error}
           </div>
         </div>
       </div>
@@ -147,47 +144,25 @@ export default function AttendanceTable() {
     <div className="card">
       <div className="card-body">
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className="card-title mb-0">My Evaluations</h5>
-          <div className="text-muted small">
-            User ID: {userId}
-          </div>
+          <h5 className="card-title mb-0">My Attendance</h5>
+          <span className="badge bg-primary">{filteredRecords.length} records</span>
         </div>
-        
-        {error && (
-          <div className="alert alert-danger">
-            <i className="bi bi-exclamation-circle me-2"></i>
-            {error}
-          </div>
-        )}
-        
-        {loading ? (
+
+        <GlobalSearchFilter
+          search={search}
+          setSearch={setSearch}
+          filter={filter}
+          setFilter={setFilter}
+          filters={filters}
+        />
+
+        {filteredRecords.length === 0 ? (
           <div className="text-center py-4">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-            <div className="mt-2">Loading your evaluations...</div>
+            <i className="bi bi-calendar-x fs-1 text-muted"></i>
+            <p className="text-muted mt-2">No attendance records found</p>
           </div>
         ) : (
-          <>
-            <GlobalSearchFilter
-              search={search}
-              setSearch={setSearch}
-              filter={filter}
-              setFilter={setFilter}
-              filters={filters}
-            />
-            
-            {filteredRecords.length === 0 ? (
-              <div className="text-center py-4">
-                <i className="bi bi-inbox" style={{ fontSize: '3rem', color: '#6c757d' }}></i>
-                <div className="mt-2 text-muted">
-                  {records.length === 0 ? 'No evaluations found' : 'No evaluations match your search criteria'}
-                </div>
-              </div>
-            ) : (
-              <Table columns={columns} data={filteredRecords} />
-            )}
-          </>
+          <Table columns={columns} data={filteredRecords} />
         )}
       </div>
     </div>

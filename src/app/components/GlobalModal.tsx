@@ -99,9 +99,21 @@ export default function GlobalModal({
                       className="form-control"
                       value={formData[field.key]}
                       disabled={field.disabled}
-                      onChange={e =>
-                        setFormData({ ...formData, [field.key]: e.target.value })
-                      }
+                      // If this is the start_date field and an end_date exists, clamp end_date to not be before start_date
+                      onChange={e => {
+                        const newVal = e.target.value;
+                        const updated: Record<string, any> = { ...formData, [field.key]: newVal };
+                        if (field.key === 'start_date') {
+                          const endVal = formData['end_date'];
+                          if (endVal && endVal < newVal) {
+                            // clamp end_date to start_date
+                            updated['end_date'] = newVal;
+                          }
+                        }
+                        setFormData(updated);
+                      }}
+                      // Add min attribute for end_date so user can't pick a date earlier than start_date
+                      {...(field.key === 'end_date' && formData['start_date'] ? { min: formData['start_date'] } : {})}
                     />
                   )}
                 </div>

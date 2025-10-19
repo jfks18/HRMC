@@ -36,11 +36,16 @@ function formatDateToWords(dateStr: string) {
 }
 
 const columns: TableColumn<AttendanceRecord>[] = [
+  { key: 'user_name' as keyof AttendanceRecord, header: 'Name' },
   { key: 'date', header: 'Date', render: (value) => formatDateToWords(value) },
   { key: 'time_in', header: 'Time In', render: (value) => formatTo12Hour(value) },
   { key: 'time_out', header: 'Time Out', render: (value) => formatTo12Hour(value) },
-  { key: 'status', header: 'Status' },
-  { key: 'late_minutes', header: 'Late Minutes' },
+  { key: 'status', header: 'Status', render: (value) => {
+    const cls = (value || '').toLowerCase();
+    const badge = cls === 'present' ? 'bg-success' : cls === 'absent' ? 'bg-danger' : cls === 'late' ? 'bg-warning text-dark' : 'bg-secondary';
+    return <span className={`badge ${badge}`}>{value || '-'}</span>;
+  } },
+  { key: 'late_minutes', header: 'Late Minutes', render: (value) => value && value > 0 ? `${value} min` : '-' },
   {
     key: 'actions' as keyof AttendanceRecord,
     header: 'Actions',
@@ -55,39 +60,91 @@ const columns: TableColumn<AttendanceRecord>[] = [
 
 export default function AttendanceTable() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [usersMap, setUsersMap] = useState<Record<string,string>>({});
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const filters = ['Present', 'Absent', 'Late', 'On Leave'];
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    if (userId) {
-      apiFetch('/api/proxy/attendance')
-        .then(res => res.json())
-        .then(data => {
-          // Filter records to show only the logged-in user's attendance
-          const userRecords = data.filter((record: AttendanceRecord) => 
-            record.user_id.toString() === userId
-          );
-          setRecords(userRecords);
-        })
-        .catch(error => {
-          console.error('Error fetching attendance data:', error);
-          setRecords([]);
-        });
-    }
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    if (!userId) return;
+
+    setLoading(true);
+    apiFetch('/api/proxy/attendance')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        const userRecords = data.filter((record: AttendanceRecord) => String(record.user_id) === String(userId));
+        setRecords(userRecords);
+        setError('');
+        // fetch users for name mapping
+        (async () => {
+          try {
+            const res = await apiFetch('/api/proxy/users', { headers: { 'Content-Type': 'application/json' } });
+            if (!res.ok) return;
+            const udata = await res.json();
+            const map: Record<string,string> = {};
+            udata.forEach((u: any) => {
+              map[String(u.id)] = u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || String(u.id);
+            });
+            setUsersMap(map);
+          } catch (e) {}
+        })();
+      })
+      .catch(error => {
+        console.error('Error fetching attendance data:', error);
+        setError(error.message || 'Failed to load attendance');
+        setRecords([]);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const filteredRecords = records.filter(record => {
-    const matchesSearch = record.date.toLowerCase().includes(search.toLowerCase()) ||
-      record.status.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter ? record.status === filter : true;
+    const matchesSearch = (record.date || '').toLowerCase().includes(search.toLowerCase()) ||
+      (record.status || '').toLowerCase().includes(search.toLowerCase()) ||
+      (usersMap[String(record.user_id)] || '').toLowerCase().includes(search.toLowerCase());
+    const matchesFilter = !filter || (record.status === filter);
     return matchesSearch && matchesFilter;
   });
+
+  if (loading) {
+    return (
+      <div className="card">
+        <div className="card-body text-center">
+          <div className="spinner-border" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="mt-2">Loading attendance records...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && records.length === 0) {
+    return (
+      <div className="card">
+        <div className="card-body text-center">
+          <div className="alert alert-warning" role="alert">
+            <i className="bi bi-exclamation-triangle me-2"></i>
+            {error}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card">
       <div className="card-body">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h5 className="card-title mb-0">My Attendance</h5>
+          <span className="badge bg-primary">{filteredRecords.length} records</span>
+        </div>
+
         <GlobalSearchFilter
           search={search}
           setSearch={setSearch}
@@ -95,7 +152,15 @@ export default function AttendanceTable() {
           setFilter={setFilter}
           filters={filters}
         />
-        <Table columns={columns} data={filteredRecords} />
+
+        {filteredRecords.length === 0 ? (
+          <div className="text-center py-4">
+            <i className="bi bi-calendar-x fs-1 text-muted"></i>
+            <p className="text-muted mt-2">No attendance records found</p>
+          </div>
+        ) : (
+          <Table columns={columns} data={filteredRecords} />
+        )}
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ export default function GlobalSearchFilter({
       <input
         className="form-control"
         style={{ maxWidth: 320 }}
-        placeholder="Search employees..."
+        placeholder="Search..."
         value={search}
         onChange={e => setSearch(e.target.value)}
       />

@@ -321,13 +321,28 @@ app.post('/leave_request', (req, res) => {
  * Returns: List of all leave requests
  */
 app.get('/leave_request', (req, res) => {
+   // Compute textual status from is_approve if status column is null to keep API consistent
    const sql = `
-    SELECT lr.*, u.name AS employee_name
+    SELECT
+      lr.id,
+      lr.user_id,
+      lr.type,
+      lr.start_date,
+      lr.end_date,
+      lr.days,
+      lr.reason,
+      lr.is_approve,
+      COALESCE(lr.status,
+        CASE WHEN lr.is_approve IS NULL THEN 'pending' WHEN lr.is_approve = 1 THEN 'approved' ELSE 'disapproved' END
+      ) AS status,
+      lr.created_at,
+      u.name AS employee_name
     FROM leave_request lr
     LEFT JOIN users u ON lr.user_id = u.id
   `;
   db.query(sql, (err, results) => {
     if (err) {
+      console.error('Leave /leave_request query error:', err);
       return res.status(500).json({ error: 'Database query error' });
     }
     res.json(results);
@@ -341,7 +356,25 @@ app.get('/leave_request', (req, res) => {
  */
 app.get('/leave_request/user/:user_id', (req, res) => {
   const user_id = req.params.user_id;
-  db.query('SELECT * FROM leave_request WHERE user_id = ?', [user_id], (err, results) => {
+  const sql = `
+    SELECT
+      lr.id,
+      lr.user_id,
+      lr.type,
+      lr.start_date,
+      lr.end_date,
+      lr.days,
+      lr.reason,
+      lr.is_approve,
+      COALESCE(lr.status,
+        CASE WHEN lr.is_approve IS NULL THEN 'pending' WHEN lr.is_approve = 1 THEN 'approved' ELSE 'disapproved' END
+      ) AS status,
+      lr.created_at
+    FROM leave_request lr
+    WHERE lr.user_id = ?
+    ORDER BY lr.created_at DESC
+  `;
+  db.query(sql, [user_id], (err, results) => {
     if (err) {
       return res.status(500).json({ error: 'Database query error' });
     }
@@ -405,19 +438,20 @@ app.patch('/leave_request/:id/approve', (req, res) => {
   if (is_approve === undefined || is_approve === null) {
     return res.status(400).json({ error: 'is_approve field is required' });
   }
-  
-  const sql = `UPDATE leave_request SET is_approve = ? WHERE id = ?`;
-  const values = [is_approve, id];
-  
+  // Also update the textual status field so frontend reads the same state on refresh
+  const statusText = is_approve ? 'approved' : 'disapproved';
+  const sql = `UPDATE leave_request SET is_approve = ?, status = ? WHERE id = ?`;
+  const values = [is_approve, statusText, id];
+
   db.query(sql, values, (err, result) => {
     if (err) {
+      console.error('Error updating leave_request approval:', err);
       return res.status(500).json({ error: 'Database update error', details: err });
     }
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Leave request not found' });
     }
-    const status = is_approve ? 'approved' : 'disapproved';
-    res.json({ message: `Leave request ${status}` });
+    res.json({ message: `Leave request ${statusText}` });
   });
 });
 
@@ -429,7 +463,24 @@ app.patch('/leave_request/:id/approve', (req, res) => {
  */
 app.get('/leave_request/:id', (req, res) => {
   const id = req.params.id;
-  db.query('SELECT * FROM leave_request WHERE id = ?', [id], (err, results) => {
+  const sql = `
+    SELECT
+      lr.id,
+      lr.user_id,
+      lr.type,
+      lr.start_date,
+      lr.end_date,
+      lr.days,
+      lr.reason,
+      lr.is_approve,
+      COALESCE(lr.status,
+        CASE WHEN lr.is_approve IS NULL THEN 'pending' WHEN lr.is_approve = 1 THEN 'approved' ELSE 'disapproved' END
+      ) AS status,
+      lr.created_at
+    FROM leave_request lr
+    WHERE lr.id = ?
+  `;
+  db.query(sql, [id], (err, results) => {
     if (err) {
       return res.status(500).json({ error: 'Database query error' });
     }
@@ -463,6 +514,27 @@ app.patch('/leave_request/:id/cancel', (req, res) => {
 });
 
 /**
+ * Disapprove Leave Request
+ * PATCH /leave_request/:id/disapprove
+ * Sets is_approve = 0 and status = 'disapproved'
+ */
+app.patch('/leave_request/:id/disapprove', (req, res) => {
+  const id = req.params.id;
+
+  const sql = `UPDATE leave_request SET is_approve = 0, status = 'disapproved' WHERE id = ?`;
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error('Error disapproving leave_request:', err);
+      return res.status(500).json({ error: 'Database update error', details: err });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Leave request not found' });
+    }
+    res.json({ message: 'Leave request disapproved successfully' });
+  });
+});
+
+/**
  * Create Attendance Record
  * POST /attendance
  * Body: { user_id, time_in, time_out, status, late_minutes, date }
@@ -488,7 +560,15 @@ app.post('/attendance', (req, res) => {
  * Returns: List of all attendance records
  */
 app.get('/attendance', (req, res) => {
-  db.query('SELECT id, user_id, time_in, time_out, status, late_minutes, date FROM attendance', (err, results) => {
+  // join users to include the user's display name
+  const sql = `
+    SELECT a.id, a.user_id, COALESCE(u.name, u.email, CONCAT(u.id, '')) AS user_name,
+           a.time_in, a.time_out, a.status, a.late_minutes, a.date
+    FROM attendance a
+    LEFT JOIN users u ON a.user_id = u.id
+    ORDER BY a.date DESC
+  `;
+  db.query(sql, (err, results) => {
     if (err) {
       return res.status(500).json({ error: 'Database query error' });
     }
@@ -503,8 +583,17 @@ app.get('/attendance', (req, res) => {
  */
 app.get('/attendance/user/:user_id', (req, res) => {
   const user_id = req.params.user_id;
-  db.query('SELECT id, user_id, time_in, time_out, status, late_minutes, date FROM attendance WHERE user_id = ? ORDER BY date DESC', [user_id], (err, results) => {
+  const sql = `
+    SELECT a.id, a.user_id, COALESCE(u.name, u.email, CONCAT(u.id, '')) AS user_name,
+           a.time_in, a.time_out, a.status, a.late_minutes, a.date
+    FROM attendance a
+    LEFT JOIN users u ON a.user_id = u.id
+    WHERE a.user_id = ?
+    ORDER BY a.date DESC
+  `;
+  db.query(sql, [user_id], (err, results) => {
     if (err) {
+      console.error(`Attendance /attendance/user/${user_id} query error:`, err);
       return res.status(500).json({ error: 'Database query error' });
     }
     if (results.length === 0) {

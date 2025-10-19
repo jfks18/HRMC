@@ -52,8 +52,7 @@ function getStatusBadge(status: string) {
 }
 
 const columns: TableColumn<AttendanceRecord>[] = [
-  { key: 'id', header: 'ID' },
-  { key: 'user_id', header: 'User ID' },
+  { key: 'user_id' as keyof AttendanceRecord, header: 'ID' },
   { 
     key: 'date', 
     header: 'Date', 
@@ -110,7 +109,7 @@ export default function AttendanceTable() {
         
         const data = await response.json();
         console.log('Fetched attendance records:', data);
-        setRecords(data);
+  setRecords(data);
         setError('');
         
       } catch (err: any) {
@@ -125,12 +124,16 @@ export default function AttendanceTable() {
     fetchAttendanceRecords();
   }, []);
 
+
   const filteredRecords = records.filter(record => {
+    const s = (search || '').toString();
+    const lowerS = s.toLowerCase();
     const matchesSearch =
-      record.id.toString().includes(search) ||
-      record.user_id.toString().includes(search) ||
-      record.date.toLowerCase().includes(search.toLowerCase()) ||
-      (record.status || '').toLowerCase().includes(search.toLowerCase());
+      String(record.id).includes(s) ||
+      String(record.user_id).includes(s) ||
+      (String((record as any).user_name) || '').toLowerCase().includes(lowerS) ||
+      String(record.date || '').toLowerCase().includes(lowerS) ||
+      (String(record.status || '')).toLowerCase().includes(lowerS);
     
     const matchesFilter = 
       filter === 'All' || 
@@ -188,7 +191,10 @@ export default function AttendanceTable() {
             <p className="text-muted mt-2">No attendance records found</p>
           </div>
         ) : (
-          <Table columns={columns} data={filteredRecords} />
+          <Table
+            columns={columns}
+            data={filteredRecords}
+          />
         )}
       </div>
     </div>

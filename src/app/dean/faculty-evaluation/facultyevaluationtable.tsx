@@ -51,6 +51,11 @@ export default function FacultyEvaluationTable() {
       header: 'Actions',
       render: (_value, row) => {
         const handleViewData = () => {
+          // Only allow opening the viewer for evaluations owned by the logged-in user
+          if (String(row.teacher_id) !== String(userId)) {
+            console.warn('Attempt to view evaluation not owned by current user:', row.teacher_id, userId);
+            return;
+          }
           setSelectedEvaluationId(row.id);
           setSelectedTeacherId(row.teacher_id);
         };
@@ -114,11 +119,13 @@ export default function FacultyEvaluationTable() {
           throw new Error(`HTTP ${response.status}: Failed to fetch evaluations`);
         }
 
-        const data = await response.json();
-        setRecords(data);
+    const data = await response.json();
+    // Filter server response to only include evaluations that belong to this logged-in teacher
+    const onlyMine = Array.isArray(data) ? data.filter((rec: EvaluationRecord) => String(rec.teacher_id) === String(userId)) : [];
+    setRecords(onlyMine);
 
-        // Fetch teacher names for all unique teacher_ids
-  const uniqueTeacherIds: string[] = Array.from(new Set(data.map((rec: EvaluationRecord) => rec.teacher_id)));
+    // Fetch teacher names for all unique teacher_ids (use filtered set)
+  const uniqueTeacherIds: string[] = Array.from(new Set((onlyMine).map((rec: EvaluationRecord) => rec.teacher_id)));
         const names: Record<string, string> = {};
         await Promise.all(uniqueTeacherIds.map(async (tid: string) => {
           try {
