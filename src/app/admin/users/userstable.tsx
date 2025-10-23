@@ -6,7 +6,10 @@ interface User {
   name: string;
   email: string;
   roleName: string;
-  department: number;
+  // From backend: department_id is stringified; include department_name for display
+  department_id: string | null;
+  department_name?: string | null;
+  code?: string;
 }
 
 export default function UsersTable({ filters, usersProp }: { filters?: { query?: string; role?: string; department?: string }, usersProp?: any[] }) {
@@ -58,7 +61,7 @@ export default function UsersTable({ filters, usersProp }: { filters?: { query?:
       if (String(u.roleName) !== String(role)) return false;
     }
     if (department) {
-      if (String(u.department) !== String(department)) return false;
+      if (String(u.department_id ?? '') !== String(department)) return false;
     }
     return true;
   });
@@ -82,7 +85,11 @@ export default function UsersTable({ filters, usersProp }: { filters?: { query?:
         alert(data.error || 'Failed to assign department.');
         return;
       }
-      setUsers(users => users.map(u => u.id === selectedUser.id ? { ...u, department: deptObj.id } : u));
+      setUsers(users => users.map(u =>
+        u.id === selectedUser.id
+          ? { ...u, department_id: String(deptObj.id), department_name: deptObj.name }
+          : u
+      ));
       setShowModal(false);
     } catch (err) {
       alert('Failed to assign department.');
@@ -110,14 +117,14 @@ export default function UsersTable({ filters, usersProp }: { filters?: { query?:
                 <td>{user.name}</td>
                 <td>{user.email}</td>
                 <td>{user.roleName}</td>
-                <td>{Array.isArray(departments) ? departments.find(d => d.id === user.department)?.name || '' : ''}</td>
+                <td>{user.department_name || ''}</td>
                 <td>
                   <div className="d-flex gap-2">
                             <button className="btn btn-sm btn-warning" onClick={() => {
                               setSelectedUser(user);
-                              // Find department id by name
-                              setSelectedUser(user);
-                              setSelectedDept(user.department || '');
+                              // Initialize selected dept from user's department_id
+                              const parsed = user.department_id ? Number(user.department_id) : NaN;
+                              setSelectedDept(Number.isFinite(parsed) ? parsed : '');
                               setShowModal(true);
                             }}>Assign Department</button>
                     <button className="btn btn-sm btn-danger" onClick={() => handleDelete(user)}>Delete</button>

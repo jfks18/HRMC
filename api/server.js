@@ -31,7 +31,7 @@ dotenv.config();
 // Middleware
 // Configure CORS origins via env var so we can accept requests from ngrok or other origins
 // Set CORS_ORIGINS to a comma-separated list of allowed origins (e.g. "https://buck-leading-pipefish.ngrok-free.app,http://localhost:3000")
-const rawCorsOrigins = process.env.CORS_ORIGINS || 'https://active-upward-sunbeam.ngrok-free.app';
+const rawCorsOrigins = process.env.CORS_ORIGINS || 'https://active-upward-sunbeam.ngrok-free.app' || 'http://localhost:3000';
 const ALLOWED_ORIGINS = rawCorsOrigins.split(',').map(s => s.trim()).filter(Boolean);
 
 app.use(cors({
