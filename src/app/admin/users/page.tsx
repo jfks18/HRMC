@@ -62,9 +62,14 @@ export default function UserManagement() {
                 rn && <option key={rn} value={rn}>{rn}</option>
               ))}
             </select>
-            <select className="form-select" style={{ maxWidth: 160 }} value={filters.department || ''} onChange={e => setFilters(f => ({ ...f, department: e.target.value }))}>
+            <select
+              className="form-select"
+              style={{ maxWidth: 200 }}
+              value={filters.department || ''}
+              onChange={e => setFilters(f => ({ ...f, department: e.target.value }))}
+            >
               <option value="">All Departments</option>
-              {departments.filter(d => users.some(u => String(u.department) === String(d.id))).map(d => (
+              {departments.map(d => (
                 <option key={d.id} value={String(d.id)}>{d.name}</option>
               ))}
             </select>
