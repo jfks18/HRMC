@@ -55,13 +55,28 @@ export default function UsersTable({ filters, usersProp }: { filters?: { query?:
     const { query, role, department } = filters;
     if (query) {
       const q = String(query).toLowerCase();
-      if (!(String(u.name).toLowerCase().includes(q) || String(u.email).toLowerCase().includes(q) || String(u.roleName).toLowerCase().includes(q))) return false;
+      const inName = String(u.name).toLowerCase().includes(q);
+      const inEmail = String(u.email).toLowerCase().includes(q);
+      const inRole = String(u.roleName).toLowerCase().includes(q);
+      const inDeptName = String(u.department_name || '').toLowerCase().includes(q);
+      const inCode = String(u.code || '').toLowerCase().includes(q);
+      if (!(inName || inEmail || inRole || inDeptName || inCode)) return false;
     }
     if (role) {
       if (String(u.roleName) !== String(role)) return false;
     }
-    if (department) {
-      if (String(u.department_id ?? '') !== String(department)) return false;
+    if (department !== undefined && department !== null) {
+      const depVal = String(department).trim().toLowerCase();
+      // Treat common "all" options as no filter
+      const isAll = depVal === '' || depVal === 'all' || depVal === 'all department' || depVal === 'all departments';
+      if (!isAll) {
+        const isNumericId = /^\d+$/.test(depVal);
+        if (isNumericId) {
+          if (String(u.department_id ?? '').toLowerCase() !== depVal) return false;
+        } else {
+          if (String(u.department_name || '').toLowerCase() !== depVal) return false;
+        }
+      }
     }
     return true;
   });
