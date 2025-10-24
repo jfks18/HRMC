@@ -1,16 +1,22 @@
 import React from 'react';
 
-const stats = [
-  { label: 'Total Requests', value: 3, icon: 'bi-file-earmark', color: '#1a237e' },
-  { label: 'Approved', value: 1, icon: 'bi-check2-circle', color: '#388e3c' },
-  { label: 'Pending', value: 1, icon: 'bi-clock', color: '#ffb300' },
-  { label: 'This Month', value: 3, icon: 'bi-award', color: '#7c3aed' },
-];
+export type CertificateStats = {
+  total: number;
+  approved: number;
+  pending: number;
+  thisMonth: number;
+};
 
-export default function CertificatesStatsCards() {
+export default function CertificatesStatsCards({ stats }: { stats: CertificateStats }) {
+  const cards = [
+    { label: 'Total Requests', value: stats.total, icon: 'bi-file-earmark', color: '#1a237e' },
+    { label: 'Approved', value: stats.approved, icon: 'bi-check2-circle', color: '#388e3c' },
+    { label: 'Pending', value: stats.pending, icon: 'bi-clock', color: '#ffb300' },
+    { label: 'This Month', value: stats.thisMonth, icon: 'bi-award', color: '#7c3aed' },
+  ];
   return (
     <div className="row g-3 mb-4">
-      {stats.map(stat => (
+      {cards.map(stat => (
         <div className="col-md-3" key={stat.label}>
           <div className="card border-0 shadow-sm d-flex flex-row align-items-center gap-3 p-3" style={{ background: '#fff' }}>
             <div className="bg-light rounded-circle d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>

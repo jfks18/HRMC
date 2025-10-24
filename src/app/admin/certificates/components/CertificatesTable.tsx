@@ -21,7 +21,7 @@ interface CertificateRequest {
   certificate_file_name?: string;
 }
 
-export default function CertificatesTable() {
+export default function CertificatesTable({ onStatsChange }: { onStatsChange?: (stats: { total: number; approved: number; pending: number; thisMonth: number }) => void }) {
   const [requests, setRequests] = useState<CertificateRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -55,6 +55,20 @@ export default function CertificatesTable() {
       setLoading(false);
     }
   };
+
+  // Emit stats to parent whenever requests change
+  useEffect(() => {
+    if (!onStatsChange) return;
+    const total = requests.length;
+    const approved = requests.filter(r => r.status === 'Approved').length;
+    const pending = requests.filter(r => r.status === 'Pending' || r.status === 'Processing' || r.status === null).length;
+    const now = new Date();
+    const thisMonth = requests.filter(r => {
+      const d = new Date(r.request_date);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
+    onStatsChange({ total, approved, pending, thisMonth });
+  }, [requests, onStatsChange]);
 
   const handleApprove = (request: CertificateRequest) => {
     setSelectedRequest(request);
