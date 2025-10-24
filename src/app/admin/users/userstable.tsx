@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../../apiFetch';
 
 interface User {
@@ -12,7 +12,15 @@ interface User {
   code?: string;
 }
 
-export default function UsersTable({ filters, usersProp }: { filters?: { query?: string; role?: string; department?: string }, usersProp?: any[] }) {
+export default function UsersTable({ 
+  filters, 
+  usersProp, 
+  onStatsChange
+}: { 
+  filters?: { query?: string; role?: string; department?: string }, 
+  usersProp?: any[],
+  onStatsChange?: (stats: { visible: number; byRole: Record<string, number> }) => void
+}) {
   const [users, setUsers] = useState<User[]>(usersProp ?? []);
   const handleDelete = async (user: User) => {
     console.log('Attempting to delete user:', user);
@@ -50,7 +58,8 @@ export default function UsersTable({ filters, usersProp }: { filters?: { query?:
       .then(data => setDepartments(data));
   }, [usersProp]);
 
-  const filteredUsers = users.filter(u => {
+  // Memoize filtering to keep reference stable across parent re-renders
+  const filteredUsers = useMemo(() => users.filter(u => {
     if (!filters) return true;
     const { query, role, department } = filters;
     if (query) {
@@ -79,7 +88,23 @@ export default function UsersTable({ filters, usersProp }: { filters?: { query?:
       }
     }
     return true;
-  });
+  }), [users, filters]);
+
+  // Emit stats upward so the page can render accurate stat cards based on the table
+  const lastStatsKeyRef = useRef<string>('');
+  useEffect(() => {
+    if (!onStatsChange) return;
+    const byRole: Record<string, number> = {};
+    for (const u of filteredUsers) {
+      const key = String(u.roleName || '').trim() || 'No Role';
+      byRole[key] = (byRole[key] || 0) + 1;
+    }
+    const payload = { visible: filteredUsers.length, byRole };
+    const key = JSON.stringify(payload);
+    if (key === lastStatsKeyRef.current) return; // avoid update loops on identical stats
+    lastStatsKeyRef.current = key;
+    onStatsChange(payload);
+  }, [onStatsChange, filteredUsers]);
 
   // Assign department handler
   const handleAssignDepartment = async () => {

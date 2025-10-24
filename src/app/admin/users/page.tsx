@@ -19,7 +19,21 @@ export default function UserManagement() {
   const [roles, setRoles] = useState<{ id: number; name: string }[]>([]);
   const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [tableStats, setTableStats] = useState<{ visible: number; byRole: Record<string, number> }>({ visible: 0, byRole: {} });
   const [filters, setFilters] = useState<{ query?: string; role?: string; department?: string }>({});
+  // Derive counts for Faculty (includes Dean) and Staff from current visible table stats
+  const facultyCount = React.useMemo(() => {
+    const entries = Object.entries(tableStats.byRole || {});
+    return entries.reduce((acc, [role, count]) => (
+      ['faculty', 'dean'].includes(String(role).toLowerCase()) ? acc + (count || 0) : acc
+    ), 0);
+  }, [tableStats.byRole]);
+  const staffCount = React.useMemo(() => {
+    const entries = Object.entries(tableStats.byRole || {});
+    return entries.reduce((acc, [role, count]) => (
+      ['staff'].includes(String(role).toLowerCase()) ? acc + (count || 0) : acc
+    ), 0);
+  }, [tableStats.byRole]);
   const userFields: GlobalModalField[] = [
     { key: 'name', label: 'Name' },
     { key: 'email', label: 'Email', type: 'email' },
@@ -78,24 +92,59 @@ export default function UserManagement() {
             </div>
           </div>
           <div className="row g-3 mb-4">
-            {userStats.map(stat => (
-              <div className="col-md-3" key={stat.label}>
-                <div className="card border-0 shadow-sm d-flex flex-row align-items-center gap-3 p-3" style={{ background: '#fff' }}>
-                  <div className="bg-light rounded-circle d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>
-                    {stat.icon}
-                  </div>
-                  <div>
-                    <div className="fw-semibold" style={{ color: '#1a237e' }}>{stat.label}</div>
-                    <div className="fs-5 fw-bold">{stat.value}</div>
-                  </div>
+            {/* Total Users (all records fetched) */}
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm d-flex flex-row align-items-center gap-3 p-3" style={{ background: '#fff' }}>
+                <div className="bg-light rounded-circle d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>
+                  {userStats[0].icon}
+                </div>
+                <div>
+                  <div className="fw-semibold" style={{ color: '#1a237e' }}>Total Users</div>
+                  <div className="fs-5 fw-bold">{users.length}</div>
                 </div>
               </div>
-            ))}
+            </div>
+            {/* Visible (Filtered) Users */}
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm d-flex flex-row align-items-center gap-3 p-3" style={{ background: '#fff' }}>
+                <div className="bg-light rounded-circle d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>
+                  {userStats[1].icon}
+                </div>
+                <div>
+                  <div className="fw-semibold" style={{ color: '#1a237e' }}>Visible Users</div>
+                  <div className="fs-5 fw-bold">{tableStats.visible}</div>
+                </div>
+              </div>
+            </div>
+            {/* Faculty count (based on visible rows) */}
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm d-flex flex-row align-items-center gap-3 p-3" style={{ background: '#fff' }}>
+                <div className="bg-light rounded-circle d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>
+                  {userStats[2].icon}
+                </div>
+                <div>
+                  <div className="fw-semibold" style={{ color: '#1a237e' }}>Faculty</div>
+                  <div className="fs-5 fw-bold">{facultyCount}</div>
+                </div>
+              </div>
+            </div>
+            {/* Staff count (based on visible rows) */}
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm d-flex flex-row align-items-center gap-3 p-3" style={{ background: '#fff' }}>
+                <div className="bg-light rounded-circle d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>
+                  {userStats[3].icon}
+                </div>
+                <div>
+                  <div className="fw-semibold" style={{ color: '#1a237e' }}>Staff</div>
+                  <div className="fs-5 fw-bold">{staffCount}</div>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="card border-0 shadow-sm">
             <div className="card-body">
               <h5 className="fw-bold mb-3" style={{ color: '#1a237e' }}>System Users</h5>
-              <UsersTable filters={filters} usersProp={users} />
+              <UsersTable filters={filters} usersProp={users} onStatsChange={setTableStats} />
             </div>
           </div>
           <GlobalModal

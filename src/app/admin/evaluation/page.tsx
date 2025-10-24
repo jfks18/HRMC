@@ -68,7 +68,6 @@ export default function EvaluationPage() {
             <button className="btn btn-dark d-flex align-items-center gap-2" onClick={() => setShowModal(true)}><i className="bi bi-plus-circle"></i> New Evaluation</button>
           </div>
           <div className="text-muted mb-4">Evaluate faculty performance and view evaluation reports</div>
-          <EvaluationStatsCards />
           <EvaluationTable filters={filters} />
         </main>
         <GlobalModal
