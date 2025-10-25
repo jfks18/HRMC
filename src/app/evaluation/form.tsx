@@ -1,16 +1,19 @@
 // ...existing code from form.tsx remains unchanged...
 
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '../apiFetch';
 
 function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { studentId: string, teacherId?: string, teacherName?: string, evaluationId?: string }) {
+	const router = useRouter();
 	const [questions, setQuestions] = useState<{ id: number; text: string }[]>([]);
 	const [responses, setResponses] = useState<(number|string)[]>([]);
 	const [submitted, setSubmitted] = useState(false);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [incomplete, setIncomplete] = useState<number[]>([]);
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
 
 	useEffect(() => {
 		apiFetch('/api/proxy/evaluation_questions')
@@ -20,6 +23,8 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 				setQuestions(mapped);
 				// For remarks questions (21,22,23) use '', for others use undefined
 				setResponses(mapped.map((q: any) => (q.id === 21 || q.id === 22 || q.id === 23) ? '' : undefined));
+				// Reset to first section when questions load
+				setCurrentSectionIndex(0);
 			})
 			.catch(() => setQuestions([]));
 	}, []);
@@ -90,6 +95,8 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 						});
 				await Promise.all(submitPromises);
 				setSubmitted(true);
+				// Redirect back to evaluation start (auth screen)
+				router.replace('/evaluation');
 			} catch (err) {
 				const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
 				setError(`Failed to submit evaluation: ${errorMessage}`);
@@ -97,6 +104,48 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 				setLoading(false);
 			}
 		};
+
+	// Section helpers
+	const getSectionName = (qid: number) => {
+		if (qid >= 1 && qid <= 8) return 'Instructional Competence';
+		if (qid >= 9 && qid <= 12) return 'Classroom and Student Management';
+		if (qid >= 13 && qid <= 17) return 'Professionalism and Ethics';
+		if (qid === 21) return 'Comments';
+		return 'Spiritual and Values';
+	};
+
+	const orderedSections = useMemo(() => {
+		const seen = new Set<string>();
+		const order: string[] = [];
+		questions.forEach(q => {
+			const s = getSectionName(q.id);
+			if (!seen.has(s)) { seen.add(s); order.push(s); }
+		});
+		return order;
+	}, [questions]);
+
+	const currentSection = orderedSections[currentSectionIndex] || '';
+
+	const questionIndexesInSection = useMemo(() => {
+		const arr: number[] = [];
+		questions.forEach((q, idx) => {
+			if (getSectionName(q.id) === currentSection) arr.push(idx);
+		});
+		return arr;
+	}, [questions, currentSection]);
+
+	const isAnswered = (idx: number) => {
+		const q = questions[idx];
+		const resp = responses[idx];
+		if (!q) return false;
+		if (q.id === 21 || q.id === 22 || q.id === 23) return typeof resp === 'string' && String(resp).trim() !== '';
+		return typeof resp === 'number' && resp >= 1 && resp <= 5;
+	};
+
+	const isCurrentSectionComplete = questionIndexesInSection.every(isAnswered);
+
+	const goPrev = () => setCurrentSectionIndex(i => Math.max(0, i - 1));
+	const goNext = () => setCurrentSectionIndex(i => Math.min(orderedSections.length - 1, i + 1));
 
 	return (
 		<div style={{ maxWidth: 650, margin: "48px auto", background: "#f8fafc", padding: 0, borderRadius: 20, boxShadow: "0 4px 24px rgba(44,62,80,0.13)" }}>
@@ -146,90 +195,86 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 						No evaluation questions found. Please check your database and API.
 					</div>
 				)}
-								{/* Categorized questions with section headers */}
-								{(() => {
-									const sections = [
-										{ label: 'Instructional Competence', range: [1,8] },
-										{ label: 'Classroom and Student Management', range: [9,12] },
-										{ label: 'Professionalism and Ethics', range: [13,17] },
-									];
-									let lastSection = '';
-									return questions.map((q, idx) => {
-										let section = '';
-										if (q.id >= 1 && q.id <= 8) section = 'Instructional Competence';
-										else if (q.id >= 9 && q.id <= 11) section = 'Classroom and Student Management';
-										else if (q.id >= 13 && q.id <= 17) section = 'Professionalism and Ethics';
-										else section = 'Spiritual and Values';
-										const showHeader = section !== lastSection;
-										lastSection = section;
+
+								{/* Section Card */}
+								<div style={{ marginBottom: 28, padding: "22px 22px", background: "#fff", borderRadius: 14, boxShadow: "0 2px 12px rgba(44,62,80,0.08)", border: "1px solid #e3f2fd" }}>
+									<div style={{ fontWeight: 800, color: '#1976d2', fontSize: '1.18rem', marginBottom: 12, letterSpacing: 0.4 }}>
+										{currentSection || 'Evaluation'}
+									</div>
+									{questionIndexesInSection.map(idx => {
+										const q = questions[idx];
 										const isIncomplete = incomplete.includes(idx);
 										return (
-											<React.Fragment key={q.id}>
-												{showHeader && (
-													<div style={{ fontWeight: 800, color: '#1976d2', fontSize: '1.15rem', margin: '32px 0 12px 0', letterSpacing: 0.5 }}>
-														{section}
-													</div>
-												)}
-
-												<div style={{ marginBottom: 28, padding: "18px 20px", background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(44,62,80,0.07)", border: isIncomplete ? "2px solid #e53935" : ((q.id === 21 || q.id === 22 || q.id === 23 ? (typeof responses[idx] === 'string' && responses[idx].trim() !== '') : responses[idx] != null && responses[idx] !== 0) ? "2px solid #90caf9" : "2px solid #eceff1") }}>
-													<label style={{ fontWeight: 700, color: "#263238", marginBottom: 10, display: "block", fontSize: "1.08rem" }}>{q.id}. {q.text}</label>
-													{q.id === 21 || q.id === 22 || q.id === 23 ? (
-														<>
-															<label style={{ fontWeight: 600, color: "#1976d2", marginBottom: 6, display: "block" }}>Remarks</label>
-															<textarea
+											<div key={q.id} style={{ marginBottom: 24, padding: "16px 18px", background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(44,62,80,0.07)", border: isIncomplete ? "2px solid #e53935" : (isAnswered(idx) ? "2px solid #90caf9" : "2px solid #eceff1") }}>
+												<label style={{ fontWeight: 700, color: "#263238", marginBottom: 10, display: "block", fontSize: "1.08rem" }}>{q.id}. {q.text}</label>
+												{q.id === 21 || q.id === 22 || q.id === 23 ? (
+													<>
+														<label style={{ fontWeight: 600, color: "#1976d2", marginBottom: 6, display: "block" }}>{q.id === 21 ? 'Comments' : 'Remarks'}</label>
+														<textarea
 															value={typeof responses[idx] === 'string' ? responses[idx] : ''}
 															onChange={e => handleRemarksChange(idx, e.target.value)}
-																rows={3}
-																style={{ width: "100%", borderRadius: 8, border: "1px solid #90caf9", padding: 10, fontSize: "1.08rem" }}
-																required
-															/>
-															{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
-														</>
-													) : (
-														<div style={{ display: "flex", gap: 18, marginTop: 8 }}>
-															{[1,2,3,4,5].map(rating => (
-																<label key={rating} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer" }}>
-																	<input
-																		type="radio"
-																		name={`q${q.id}`}
-																		value={rating}
-																		checked={responses[idx] === rating}
-																		onChange={() => handleChange(idx, rating)}
-																		required
-																		style={{ accentColor: "#1976d2", width: 22, height: 22, marginBottom: 2 }}
-																	/>
-																	<span style={{ fontWeight: 600, color: responses[idx] === rating ? "#1976d2" : "#78909c", fontSize: "1.08rem" }}>{rating}</span>
-																</label>
-															))}
-															{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
-														</div>
-													)}
-												</div>
-											</React.Fragment>
+															rows={3}
+															placeholder={q.id === 21 ? 'Write your comments about the faculty member here...' : 'Add your remarks here...'}
+															style={{ width: "100%", borderRadius: 8, border: "1px solid #90caf9", padding: 10, fontSize: "1.08rem" }}
+															required
+														/>
+														{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
+													</>
+												) : (
+													<div style={{ display: "flex", gap: 18, marginTop: 8, flexWrap: 'wrap' }}>
+														{[1,2,3,4,5].map(rating => (
+															<label key={rating} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer" }}>
+																<input
+																	type="radio"
+																	name={`q${q.id}`}
+																	value={rating}
+																	checked={responses[idx] === rating}
+																	onChange={() => handleChange(idx, rating)}
+																	required
+																	style={{ accentColor: "#1976d2", width: 22, height: 22, marginBottom: 2 }}
+																/>
+																<span style={{ fontWeight: 600, color: responses[idx] === rating ? "#1976d2" : "#78909c", fontSize: "1.08rem" }}>{rating}</span>
+															</label>
+														))}
+														{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
+													</div>
+												)}
+											</div>
 										);
-									});
-								})()}
-				<button
-					type="submit"
-					disabled={loading || submitted}
-					style={{
-						width: "100%",
-						padding: "1.1rem",
-						borderRadius: "12px",
-						background: loading || submitted ? "#90a4ae" : "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)",
-						color: "white",
-						fontWeight: 800,
-						fontSize: "1.18rem",
-						border: "none",
-						boxShadow: "0 2px 12px rgba(44,62,80,0.10)",
-						cursor: loading || submitted ? "not-allowed" : "pointer",
-						letterSpacing: 0.7,
-						marginTop: 12,
-						opacity: loading || submitted ? 0.7 : 1
-					}}
-				>
-					{loading ? "Submitting..." : submitted ? "Submitted!" : "Submit Evaluation"}
-				</button>
+									})}
+
+									{/* Section navigation */}
+									<div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
+										<button
+											type="button"
+											className="btn btn-outline-secondary"
+											onClick={goPrev}
+											disabled={currentSectionIndex === 0 || loading || submitted}
+										>
+											<i className="bi bi-arrow-left me-1"></i> Previous
+										</button>
+										{currentSectionIndex < Math.max(0, orderedSections.length - 1) ? (
+											<button
+												type="button"
+												className="btn btn-primary"
+												onClick={goNext}
+												disabled={!isCurrentSectionComplete || loading || submitted}
+												style={{ backgroundColor: isCurrentSectionComplete ? '#1976d2' : '#90a4ae', borderColor: 'transparent' }}
+											>
+												Next <i className="bi bi-arrow-right ms-1"></i>
+											</button>
+										) : (
+											<button
+												type="submit"
+												className="btn btn-success"
+												disabled={!isCurrentSectionComplete || loading || submitted}
+											>
+												<i className="bi bi-check2-circle me-1"></i> Submit Evaluation
+											</button>
+										)}
+									</div>
+								</div>
+
 				{error && <div style={{ color: "#e53935", marginTop: 18, fontWeight: 700, fontSize: "1.08rem" }}>{error}</div>}
 				{submitted && <div style={{ color: "#2e7d32", marginTop: 18, fontWeight: 700, fontSize: "1.08rem" }}>Thank you for your evaluation!</div>}
 			</form>
