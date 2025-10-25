@@ -1,11 +1,42 @@
-import React from 'react';
+"use client";
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import SideNav from '../components/SideNav';
 import TopBar from '../../components/TopBar';
 import DashboardCard from '../../components/DashboardCard/DashboardCard';
 import InteractiveCard from '../../components/InteractiveCard';
+import { apiFetch } from '../../apiFetch';
 
 const DeanDashboard = () => {
+   const [userName, setUserName] = useState<string>("");
+  
+    useEffect(() => {
+      // Client-side only: attempt to read from localStorage first
+      try {
+        const storedName =
+          (typeof window !== 'undefined' && (localStorage.getItem('userName') || localStorage.getItem('username') || localStorage.getItem('name'))) || "";
+        if (storedName) {
+          setUserName(storedName);
+          return;
+        }
+        const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+        if (!uid) return;
+        // Fallback: fetch name by userId from backend
+        (async () => {
+          try {
+            const res = await apiFetch(`/api/proxy/users/${uid}/name`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data?.name) setUserName(data.name);
+          } catch {
+            // ignore
+          }
+        })();
+      } catch {
+        // ignore read errors
+      }
+    }, []);
+  
   return (
     <div className="d-flex min-vh-100 bg-light">
       <SideNav />
@@ -25,7 +56,7 @@ const DeanDashboard = () => {
                         </div>
                       </div>
                        <h1 className="fw-bold mb-2" style={{ color: '#1a237e' }}>Dean Dashboard</h1>
-          <p className="text-muted mb-4">Welcome back, Dean!</p>
+          <p className="text-muted mb-4">Welcome back, {userName}!</p>
                     </div>
                   </main>
         

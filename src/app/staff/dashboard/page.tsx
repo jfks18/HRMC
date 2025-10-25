@@ -1,41 +1,64 @@
-import React from 'react';
+"use client";
+import Image from 'next/image';
+import { apiFetch } from '../../apiFetch';
+import { useEffect, useState } from 'react';
 import SideNav from '../components/SideNav';
 import TopBar from '../../components/TopBar';
 import DashboardCard from '../../components/DashboardCard/DashboardCard';
 import InteractiveCard from '../../components/InteractiveCard';
 
 const StaffDashboard = () => {
+     const [userName, setUserName] = useState<string>("");
+    
+      useEffect(() => {
+        // Client-side only: attempt to read from localStorage first
+        try {
+          const storedName =
+            (typeof window !== 'undefined' && (localStorage.getItem('userName') || localStorage.getItem('username') || localStorage.getItem('name'))) || "";
+          if (storedName) {
+            setUserName(storedName);
+            return;
+          }
+          const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+          if (!uid) return;
+          // Fallback: fetch name by userId from backend
+          (async () => {
+            try {
+              const res = await apiFetch(`/api/proxy/users/${uid}/name`);
+              if (!res.ok) return;
+              const data = await res.json();
+              if (data?.name) setUserName(data.name);
+            } catch {
+              // ignore
+            }
+          })();
+        } catch {
+          // ignore read errors
+        }
+      }, []);
+
   return (
     <div className="d-flex min-vh-100 bg-light">
       <SideNav />
       <div className="flex-grow-1">
         <TopBar />
         <main className="container-fluid py-4">
-          <h1 className="fw-bold mb-2" style={{ color: '#1a237e' }}>Staff Dashboard</h1>
-          <p className="text-muted mb-4">Welcome back, Staff!</p>
-          <div className="row g-3 mb-4">
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="My Tasks" value={12} icon="bi-list-task" />
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Attendance Rate" value="95%" icon="bi-clipboard-check" />
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Leaves Taken" value={1} icon="bi-calendar-x" />
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Certificates" value={2} icon="bi-award" />
-              </InteractiveCard>
-            </div>
-          </div>
-        </main>
+                  <div className="d-flex flex-column align-items-center justify-content-center text-center perspective-1000" style={{ minHeight: '70vh' }}>
+                    <div className="spin-3d-viewport">
+                      <div className="spin-3d-inner">
+                        <div className="spin-3d-face spin-3d-front">
+                          <Image src="/gwclogo.png" alt="GWC Logo" fill priority style={{ objectFit: 'contain' }} />
+                        </div>
+                        <div className="spin-3d-face spin-3d-back">
+                          {/* Flip horizontally so the logo reads correctly when the back faces forward */}
+                          <Image src="/gwclogo.png" alt="GWC Logo" fill priority style={{ objectFit: 'contain', transform: 'scaleX(-1)' }} />
+                        </div>
+                      </div>
+                    </div>
+                    <h1 className="fw-bold mt-3" style={{ color: '#1a237e' }}>Faculty Dashboard</h1>
+                    <p className="text-muted mb-0">Welcome back, Faculty!</p>
+                  </div>
+                </main>
       </div>
     </div>
   );

@@ -1,11 +1,42 @@
-import React from 'react';
+"use client";
 import Image from 'next/image';
 import SideNav from '../components/SideNav';
 import TopBar from '../../components/TopBar';
 import DashboardCard from '../../components/DashboardCard/DashboardCard';
 import InteractiveCard from '../../components/InteractiveCard';
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../../apiFetch';
 
 const FacultyDashboard = () => {
+     const [userName, setUserName] = useState<string>("");
+    
+      useEffect(() => {
+        // Client-side only: attempt to read from localStorage first
+        try {
+          const storedName =
+            (typeof window !== 'undefined' && (localStorage.getItem('userName') || localStorage.getItem('username') || localStorage.getItem('name'))) || "";
+          if (storedName) {
+            setUserName(storedName);
+            return;
+          }
+          const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+          if (!uid) return;
+          // Fallback: fetch name by userId from backend
+          (async () => {
+            try {
+              const res = await apiFetch(`/api/proxy/users/${uid}/name`);
+              if (!res.ok) return;
+              const data = await res.json();
+              if (data?.name) setUserName(data.name);
+            } catch {
+              // ignore
+            }
+          })();
+        } catch {
+          // ignore read errors
+        }
+      }, []);
+
   return (
     <div className="d-flex min-vh-100 bg-light">
       <SideNav />
