@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../../apiFetch';
 import { Table, TableColumn } from '../../components/Table';
 import GlobalSearchFilter from '../../components/GlobalSearchFilter';
@@ -14,6 +14,7 @@ interface LeaveRequest {
   days: number;
   reason: string;
   status: string;
+  is_approve?: number | null;
   created_at: string;
 }
 
@@ -43,8 +44,9 @@ function getStatusBadge(status: string) {
   const statusClasses = {
     pending: 'bg-warning text-dark',      // Yellow with dark text
     approved: 'bg-success',               // Green  
-    rejected: 'bg-danger',                // Red
-    disapprove: 'bg-danger',              // Red (same as rejected)
+    rejected: 'bg-danger',                // Red (legacy)
+    disapprove: 'bg-danger',              // Red (legacy)
+    disapproved: 'bg-danger',             // Red (canonical)
     cancelled: 'bg-secondary'             // Gray
   };
   
@@ -82,7 +84,25 @@ export default function LeaveTable() {
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
   const [processingIds, setProcessingIds] = useState<number[]>([]);
 
-  const filters = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+  const getRealStatus = (is_approve: number | null | undefined): string => {
+    if (is_approve === null || typeof is_approve === 'undefined') return 'pending';
+    if (is_approve === 0) return 'disapproved';
+    if (is_approve === 1) return 'approved';
+    return 'pending';
+  };
+
+  const getDisplayStatus = (row: Pick<LeaveRequest, 'status' | 'is_approve'>): string => {
+    const s = String(row.status || '').toLowerCase();
+    if (s) return s;
+    return getRealStatus(row.is_approve);
+  };
+
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of leaveRequests) set.add(getDisplayStatus(r));
+    if (set.has('rejected')) { set.delete('rejected'); set.add('disapproved'); }
+    return Array.from(set).sort();
+  }, [leaveRequests]);
 
   // Get current user ID from localStorage
   useEffect(() => {
@@ -314,14 +334,14 @@ export default function LeaveTable() {
     { 
       key: 'status', 
       header: 'Status',
-      render: (value) => getStatusBadge(value)
+      render: (_value, row) => getStatusBadge(getDisplayStatus(row))
     },
     {
       key: 'actions' as keyof LeaveRequest,
       header: 'Actions',
       render: (_value: any, row: LeaveRequest) => {
   const isOwnRequest = currentUserId && String(row.user_id) === String(currentUserId);
-    const isPending = !row.status || row.status === 'pending';
+  const isPending = getDisplayStatus(row) === 'pending';
         
         // Debug logging to help troubleshoot
         console.log('Action buttons debug:', {
@@ -399,7 +419,7 @@ export default function LeaveTable() {
                 <div className="col-6 mt-3"><strong>End Date</strong><div>{formatDate(s.end_date)}</div></div>
                 <div className="col-12 mt-3"><strong>Days</strong><div>{s.days}</div></div>
                 <div className="col-12 mt-3"><strong>Reason</strong><div>{s.reason}</div></div>
-                <div className="col-12 mt-3"><strong>Status</strong><div>{s.status || 'pending'}</div></div>
+                <div className="col-12 mt-3"><strong>Status</strong><div>{getDisplayStatus(s)}</div></div>
               </div>
             </div>
             <div className="modal-footer">
@@ -428,12 +448,11 @@ export default function LeaveTable() {
       (String(request.user_name || '')).toLowerCase().includes(lowerS) ||
       String(request.type || '').toLowerCase().includes(lowerS) ||
       String(request.reason || '').toLowerCase().includes(lowerS) ||
-      (String(request.status || 'pending')).toLowerCase().includes(lowerS);
+      getDisplayStatus(request).toLowerCase().includes(lowerS);
     
     const matchesFilter = 
-      filter === 'All' || 
       !filter || 
-      (request.status || 'pending').toLowerCase() === filter.toLowerCase();
+      getDisplayStatus(request).toLowerCase() === filter.toLowerCase();
     
     return matchesSearch && matchesFilter;
   });
@@ -478,7 +497,7 @@ export default function LeaveTable() {
           setSearch={setSearch}
           filter={filter}
           setFilter={setFilter}
-          filters={filters}
+          filters={statusOptions}
         />
         
         {filteredRequests.length === 0 ? (

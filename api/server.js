@@ -684,7 +684,14 @@ app.post('/evaluation', async (req, res) => {
 // Get all evaluations
 app.get('/evaluation', async (req, res) => {
   try {
-    const [rows] = await db.promise().query('SELECT * FROM evaluation');
+    const [rows] = await db.promise().query(`
+      SELECT 
+        e.*, 
+        u.name AS teacher_name
+      FROM evaluation e
+      LEFT JOIN users u ON e.teacher_id = u.id
+      ORDER BY e.created_at DESC
+    `);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });

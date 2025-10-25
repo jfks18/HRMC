@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import GlobalModal, { GlobalModalField } from '../../components/GlobalModal';
 import { apiFetch } from '../../apiFetch';
 import { Table, TableColumn } from '../../components/Table';
@@ -13,6 +13,8 @@ interface LeaveRequest {
   end_date: string;
   reason: string;
   status?: string;
+  is_approve?: number | null;
+  days?: number | null;
   created_at?: string;
 }
 
@@ -43,6 +45,7 @@ function getStatusBadge(status: string) {
     approved: 'bg-success',
     rejected: 'bg-danger',
     disapprove: 'bg-danger',
+    disapproved: 'bg-danger',
     cancelled: 'bg-secondary'
   };
   return (
@@ -71,7 +74,7 @@ function getLeaveTypeBadge(type: string) {
 export default function LeaveTable() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
@@ -79,7 +82,25 @@ export default function LeaveTable() {
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
 
-  const filters = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+  const getRealStatus = (is_approve: number | null | undefined): string => {
+    if (is_approve === null || typeof is_approve === 'undefined') return 'pending';
+    if (is_approve === 0) return 'disapproved';
+    if (is_approve === 1) return 'approved';
+    return 'pending';
+  };
+
+  const getDisplayStatus = (row: Pick<LeaveRequest, 'status' | 'is_approve'>): string => {
+    const s = String(row.status || '').toLowerCase();
+    if (s) return s;
+    return getRealStatus(row.is_approve);
+  };
+
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of leaveRequests) set.add(getDisplayStatus(r));
+    if (set.has('rejected')) { set.delete('rejected'); set.add('disapproved'); }
+    return Array.from(set).sort();
+  }, [leaveRequests]);
 
   // Get user ID from localStorage
   useEffect(() => {
@@ -280,11 +301,11 @@ export default function LeaveTable() {
     { key: 'end_date', header: 'End Date', render: (value) => formatDate(value) },
   { key: 'days' as any, header: 'Days', render: (_v, row) => computeDays(row.start_date, row.end_date, (row as any).days) },
     { key: 'reason', header: 'Reason', render: (value) => (<div style={{ maxWidth: '200px' }}>{value?.length > 50 ? `${value.substring(0, 50)}...` : value}</div>) },
-    { key: 'status', header: 'Status', render: (value) => getStatusBadge(value || 'pending') },
+  { key: 'status', header: 'Status', render: (_value, row) => getStatusBadge(getDisplayStatus(row)) },
     { key: 'actions' as keyof LeaveRequest, header: 'Actions', render: (_value, row) => (
   <div className="d-flex gap-2">
   <button className="btn btn-sm btn-outline-primary" onClick={() => setSelectedLeave(row)} title="View Details"><i className="bi bi-eye"></i></button>
-        {(!row.status || row.status === 'pending') && (
+        {getDisplayStatus(row) === 'pending' && (
           <button className="btn btn-sm btn-outline-danger" onClick={() => handleCancelRequest(row.id)} title="Cancel Request"><i className="bi bi-x-circle"></i></button>
         )}
       </div>
@@ -294,7 +315,7 @@ export default function LeaveTable() {
   // Filter
   const filteredLeaveRequests = leaveRequests.filter(request => {
     const matchesSearch = request.type.toLowerCase().includes(search.toLowerCase()) || request.reason.toLowerCase().includes(search.toLowerCase()) || request.id.toString().includes(search);
-    const matchesFilter = filter === 'All' || !filter ? true : (request.status || 'pending').toLowerCase() === filter.toLowerCase();
+    const matchesFilter = !filter ? true : getDisplayStatus(request).toLowerCase() === filter.toLowerCase();
     return matchesSearch && matchesFilter;
   });
 
@@ -331,7 +352,7 @@ export default function LeaveTable() {
           </div>
         ) : (
           <>
-            <GlobalSearchFilter search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} filters={filters} />
+            <GlobalSearchFilter search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} filters={statusOptions} />
             {filteredLeaveRequests.length === 0 ? (
               <div className="text-center py-4">
                 <i className="bi bi-inbox" style={{ fontSize: '3rem', color: '#6c757d' }}></i>

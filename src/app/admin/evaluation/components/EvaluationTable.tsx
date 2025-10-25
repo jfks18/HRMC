@@ -96,7 +96,7 @@ export default function EvaluationTable({ filters }: { filters?: { query?: strin
             <table className="table align-middle">
               <thead>
                 <tr>
-                  <th>Teacher ID</th>
+                  <th>Teacher</th>
                   <th>Expires At</th>
                   <th>Password</th>
                   <th>Status</th>
@@ -107,7 +107,12 @@ export default function EvaluationTable({ filters }: { filters?: { query?: strin
               <tbody>
                 {filteredEvaluations.map(ev => (
                   <tr key={ev.id || `${ev.teacher_id}-${ev.created_at}`}>
-                    <td>{ev.teacher_id}</td>
+                    <td>
+                      <div className="fw-semibold">{ev.teacher_name || ev.teacher_id}</div>
+                      {ev.teacher_name && (
+                        <div className="text-muted small">ID: {ev.teacher_id}</div>
+                      )}
+                    </td>
                     <td>{formatDateToWords(ev.expires_at)}</td>
                     <td>{ev.password}</td>
                     <td>

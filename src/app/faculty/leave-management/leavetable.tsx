@@ -1,5 +1,5 @@
  "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Table, TableColumn } from '../../components/Table';
 import GlobalSearchFilter from '../../components/GlobalSearchFilter';
 
@@ -11,6 +11,7 @@ interface LeaveRequest {
   end_date: string;
   reason: string;
   status?: string;
+  is_approve?: number | null;
   created_at?: string;
 }
 
@@ -28,8 +29,9 @@ function getStatusBadge(status: string) {
   const statusClasses = {
     pending: 'bg-warning text-dark',      // Yellow with dark text
     approved: 'bg-success',               // Green  
-    rejected: 'bg-danger',                // Red
-    disapprove: 'bg-danger',              // Red (same as rejected)
+    rejected: 'bg-danger',                // Red (legacy)
+    disapprove: 'bg-danger',              // Red (legacy)
+    disapproved: 'bg-danger',             // Red (canonical)
     cancelled: 'bg-secondary'             // Gray
   };
   
@@ -65,7 +67,25 @@ export default function LeaveTable() {
   const [error, setError] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
 
-  const filters = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+  const getRealStatus = (is_approve: number | null | undefined): string => {
+    if (is_approve === null || typeof is_approve === 'undefined') return 'pending';
+    if (is_approve === 0) return 'disapproved';
+    if (is_approve === 1) return 'approved';
+    return 'pending';
+  };
+
+  const getDisplayStatus = (row: Pick<LeaveRequest, 'status' | 'is_approve'>): string => {
+    const s = String(row.status || '').toLowerCase();
+    if (s) return s;
+    return getRealStatus(row.is_approve);
+  };
+
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of leaveRequests) set.add(getDisplayStatus(r));
+    if (set.has('rejected')) { set.delete('rejected'); set.add('disapproved'); }
+    return Array.from(set).sort();
+  }, [leaveRequests]);
 
   // Get user ID from localStorage
   useEffect(() => {
@@ -235,7 +255,7 @@ export default function LeaveTable() {
     { 
       key: 'status', 
       header: 'Status',
-      render: (value) => getStatusBadge(value || 'pending')
+      render: (_value, row) => getStatusBadge(getDisplayStatus(row))
     },
     {
       key: 'actions' as keyof LeaveRequest,
@@ -274,8 +294,8 @@ export default function LeaveTable() {
       request.id.toString().includes(search);
     
     const matchesFilter = 
-      filter === 'All' || !filter ? true : 
-      (request.status || 'pending').toLowerCase() === filter.toLowerCase();
+      !filter ? true : 
+      getDisplayStatus(request).toLowerCase() === filter.toLowerCase();
     
     return matchesSearch && matchesFilter;
   });
@@ -324,7 +344,7 @@ export default function LeaveTable() {
               setSearch={setSearch}
               filter={filter}
               setFilter={setFilter}
-              filters={filters}
+              filters={statusOptions}
             />
             
             {filteredLeaveRequests.length === 0 ? (

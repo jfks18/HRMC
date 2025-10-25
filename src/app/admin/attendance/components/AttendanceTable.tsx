@@ -7,6 +7,7 @@ import GlobalSearchFilter from '../../../components/GlobalSearchFilter';
 interface AttendanceRecord {
   id: number;
   user_id: number;
+  user_name?: string;
   time_in: string;
   time_out: string;
   status: string;
@@ -52,7 +53,12 @@ function getStatusBadge(status: string) {
 }
 
 const columns: TableColumn<AttendanceRecord>[] = [
-  { key: 'user_id' as keyof AttendanceRecord, header: 'Name' },
+  { key: 'user_name' as keyof AttendanceRecord, header: 'Employee', render: (_v, row) => (
+    <div>
+      <div className="fw-semibold">{row.user_name || String(row.user_id)}</div>
+      <div className="text-muted small">ID: {row.user_id}</div>
+    </div>
+  ) },
   { 
     key: 'date', 
     header: 'Date', 

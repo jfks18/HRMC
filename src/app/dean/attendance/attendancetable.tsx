@@ -7,6 +7,7 @@ import GlobalSearchFilter from '../../components/GlobalSearchFilter';
 interface AttendanceRecord {
   id: number;
   user_id: number;
+  user_name?: string;
   time_in: string;
   time_out: string;
   status: string;
@@ -52,7 +53,7 @@ function getStatusBadge(status: string) {
 }
 
 const columns: TableColumn<AttendanceRecord>[] = [
-  { key: 'user_id' as keyof AttendanceRecord, header: 'ID' },
+  { key: 'user_name' as keyof AttendanceRecord, header: 'Name', render: (_v, row) => (row.user_name || String(row.user_id)) },
   { 
     key: 'date', 
     header: 'Date', 
@@ -85,19 +86,28 @@ export default function AttendanceTable() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(''); 
+  const [userId, setUserId] = useState<string | null>(null);
 
   const filters = ['All', 'Present', 'Absent', 'Late', 'On Leave'];
 
+  useEffect(() => { 
+    // Load logged-in user's ID from localStorage
+    if (typeof window !== 'undefined') {
+      const uid = localStorage.getItem('userId');
+      setUserId(uid);
+    }
+  }, []);
+
   useEffect(() => {
+    if (!userId) return;
     const fetchAttendanceRecords = async () => {
       setLoading(true);
       setError('');
       
       try {
-        console.log('Fetching attendance records');
-        
-        const response = await apiFetch('/api/proxy/attendance', {
+        console.log('Fetching attendance records for user:', userId);
+        const response = await apiFetch(`/api/proxy/attendance/user/${encodeURIComponent(String(userId).trim())}` , {
           headers: {
             'Content-Type': 'application/json'
           }
@@ -107,9 +117,13 @@ export default function AttendanceTable() {
           throw new Error(`HTTP ${response.status}: Failed to fetch attendance records`);
         }
         
-        const data = await response.json();
+        const data: AttendanceRecord[] = await response.json();
         console.log('Fetched attendance records:', data);
-  setRecords(data);
+        // If API returns a single fallback row with null attendance fields, treat as no records
+        const cleaned = Array.isArray(data)
+          ? data.filter(r => Boolean(r.date || r.time_in || r.time_out))
+          : [];
+        setRecords(cleaned);
         setError('');
         
       } catch (err: any) {
@@ -122,16 +136,16 @@ export default function AttendanceTable() {
     };
     
     fetchAttendanceRecords();
-  }, []);
+  }, [userId]);
 
 
   const filteredRecords = records.filter(record => {
     const s = (search || '').toString();
     const lowerS = s.toLowerCase();
     const matchesSearch =
-      String(record.id).includes(s) ||
-      String(record.user_id).includes(s) ||
-      (String((record as any).user_name) || '').toLowerCase().includes(lowerS) ||
+  String(record.id).includes(s) ||
+  String(record.user_id).includes(s) ||
+  (String(record.user_name || '')).toLowerCase().includes(lowerS) ||
       String(record.date || '').toLowerCase().includes(lowerS) ||
       (String(record.status || '')).toLowerCase().includes(lowerS);
     
@@ -169,11 +183,24 @@ export default function AttendanceTable() {
     );
   }
 
+  if (!userId) {
+    return (
+      <div className="card">
+        <div className="card-body">
+          <div className="alert alert-warning">
+            <i className="bi bi-exclamation-triangle me-2"></i>
+            User not logged in. Please login to view your attendance.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <div className="card-body">
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className="card-title mb-0">Attendance Records</h5>
+          <h5 className="card-title mb-0">My Attendance</h5>
           <span className="badge bg-primary">{filteredRecords.length} records</span>
         </div>
         

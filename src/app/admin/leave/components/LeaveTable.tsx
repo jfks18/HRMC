@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Table, TableColumn } from '../../../components/Table';
 import GlobalSearchFilter from '../../../components/GlobalSearchFilter';
 
@@ -52,8 +52,9 @@ function getStatusBadge(status: string) {
   const statusClasses = {
     pending: 'bg-warning text-dark',      // Yellow with dark text
     approved: 'bg-success',               // Green  
-    rejected: 'bg-danger',                // Red
-    disapprove: 'bg-danger',              // Red (same as rejected)
+    rejected: 'bg-danger',                // Red (legacy mapping)
+    disapprove: 'bg-danger',              // Red (legacy mapping)
+    disapproved: 'bg-danger',             // Red (canonical)
     cancelled: 'bg-secondary'             // Gray
   };
   
@@ -90,7 +91,28 @@ export default function LeaveTable() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
 
-  const filters = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+  // Derive display status for a row: prefer textual status if present (e.g., cancelled),
+  // else compute from is_approve
+  const getDisplayStatus = (row: Pick<LeaveRequest, 'status' | 'is_approve'>): string => {
+    const s = String(row.status || '').toLowerCase();
+    if (s) return s;
+    return getRealStatus(row.is_approve);
+  };
+
+  // Build the status options from the actual data so the dropdown reflects the table
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of leaveRequests) {
+      set.add(getDisplayStatus(r));
+    }
+    // Normalize legacy terms
+    if (set.has('rejected')) {
+      set.delete('rejected');
+      set.add('disapproved');
+    }
+    // Return sorted for stable UI
+    return Array.from(set).sort();
+  }, [leaveRequests]);
 
   // Get current user ID from localStorage (HR user)
   useEffect(() => {
@@ -366,9 +388,8 @@ export default function LeaveTable() {
       key: 'status', 
       header: 'Status',
       render: (value: any, row: LeaveRequest) => {
-        // Use the real status based on is_approve field
-        const realStatus = getRealStatus(row.is_approve);
-        return getStatusBadge(realStatus);
+        const display = getDisplayStatus(row);
+        return getStatusBadge(display);
       }
     },
     {
@@ -376,9 +397,8 @@ export default function LeaveTable() {
       header: 'Actions',
       render: (_value: any, row: LeaveRequest) => {
   const isOwnRequest = currentUserId && String(row.user_id) === String(currentUserId);
-        // Use real status based on is_approve field
-        const realStatus = getRealStatus(row.is_approve);
-        const isPending = realStatus === 'pending';
+  const display = getDisplayStatus(row);
+  const isPending = display === 'pending';
         
         return (
           <div className="d-flex gap-1">
@@ -456,8 +476,7 @@ export default function LeaveTable() {
 
   // Filter leave requests based on search and filter
   const filteredRequests = leaveRequests.filter(request => {
-    // Get real status based on is_approve field
-    const realStatus = getRealStatus(request.is_approve);
+    const displayStatus = getDisplayStatus(request);
     
     const s = (search || '').toString();
     const lowerS = s.toLowerCase();
@@ -466,12 +485,11 @@ export default function LeaveTable() {
       (String(request.employee_name || '')).toLowerCase().includes(lowerS) ||
       String(request.type || '').toLowerCase().includes(lowerS) ||
       String(request.reason || '').toLowerCase().includes(lowerS) ||
-      realStatus.toLowerCase().includes(lowerS);
+      displayStatus.toLowerCase().includes(lowerS);
     
     const matchesFilter = 
-      filter === 'All' || 
       !filter || 
-      realStatus.toLowerCase() === filter.toLowerCase();
+      displayStatus.toLowerCase() === filter.toLowerCase();
     
     return matchesSearch && matchesFilter;
   });
@@ -516,7 +534,7 @@ export default function LeaveTable() {
           setSearch={setSearch}
           filter={filter}
           setFilter={setFilter}
-          filters={filters}
+          filters={statusOptions}
         />
         
         {filteredRequests.length === 0 ? (

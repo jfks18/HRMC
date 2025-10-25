@@ -40,3 +40,80 @@ a {
     color-scheme: dark;
   }
 }
+
+/* Spinning logo animation */
+@keyframes spin360 {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-slow {
+  animation: spin360 10s linear infinite;
+  will-change: transform;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .spin-slow {
+    animation: none;
+  }
+}
+
+/* 3D spinning animation */
+@keyframes spin3d {
+  0%   { transform: rotateX(10deg) rotateY(0deg); }
+  50%  { transform: rotateX(10deg) rotateY(180deg); }
+  100% { transform: rotateX(10deg) rotateY(360deg); }
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.spin-3d {
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  animation: spin3d 6s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin-3d {
+    animation: none;
+  }
+}
+
+/* Double-sided 3D spinner ensuring the logo is visible at 180° */
+.spin-3d-viewport {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+
+.spin-3d-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: spin3d 6s linear infinite;
+}
+
+.spin-3d-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+
+.spin-3d-front {
+  transform: rotateY(0deg);
+}
+
+.spin-3d-back {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin-3d-inner {
+    animation: none;
+  }
+}

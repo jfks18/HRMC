@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import SideNav from '../components/SideNav';
 import TopBar from '../../components/TopBar';
 import DashboardCard from '../../components/DashboardCard/DashboardCard';
@@ -10,50 +11,24 @@ const DeanDashboard = () => {
       <SideNav />
       <div className="flex-grow-1">
         <TopBar />
-        <main className="container-fluid py-4">
-          <h1 className="fw-bold mb-2" style={{ color: '#1a237e' }}>Dean Dashboard</h1>
+          <main className="container-fluid py-4">
+                    <div className="d-flex flex-column align-items-center justify-content-center text-center perspective-1000" style={{ minHeight: '70vh' }}>
+                      <div className="spin-3d-viewport">
+                        <div className="spin-3d-inner">
+                          <div className="spin-3d-face spin-3d-front">
+                            <Image src="/gwclogo.png" alt="GWC Logo" fill priority style={{ objectFit: 'contain' }} />
+                          </div>
+                          <div className="spin-3d-face spin-3d-back">
+                            {/* Flip horizontally so the logo reads correctly when the back faces forward */}
+                            <Image src="/gwclogo.png" alt="GWC Logo" fill priority style={{ objectFit: 'contain', transform: 'scaleX(-1)' }} />
+                          </div>
+                        </div>
+                      </div>
+                       <h1 className="fw-bold mb-2" style={{ color: '#1a237e' }}>Dean Dashboard</h1>
           <p className="text-muted mb-4">Welcome back, Dean!</p>
-          <div className="row g-3 mb-4">
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Total Faculty" value={48} icon="bi-people"/>
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Active Evaluations" value={12} icon="bi-clipboard-check" />
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Pending Leaves" value={5} icon="bi-hourglass-split" />
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Faculty Attendance" value="98%" icon="bi-graph-up" />
-              </InteractiveCard>
-            </div>
-          </div>
-          <div className="row g-4">
-            <div className="col-lg-8">
-              <div className="card h-100 shadow-sm border-0" style={{ background: '#f8fafd' }}>
-                <div className="card-body">
-                  <h5 className="card-title fw-bold mb-3" style={{ color: '#1a237e' }}>Recent Activity</h5>
-                  {/* Add RecentActivity here */}
-                </div>
-              </div>
-            </div>
-            <div className="col-lg-4">
-              <div className="card h-100 shadow-sm border-0" style={{ background: '#f8fafd' }}>
-                <div className="card-body">
-                  <h5 className="card-title fw-bold mb-3" style={{ color: '#1a237e' }}>Quick Actions</h5>
-                  {/* Add QuickActions here */}
-                </div>
-              </div>
-            </div>
-          </div>
-        </main>
+                    </div>
+                  </main>
+        
       </div>
     </div>
   );

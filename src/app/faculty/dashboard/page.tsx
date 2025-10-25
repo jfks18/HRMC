@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import SideNav from '../components/SideNav';
 import TopBar from '../../components/TopBar';
 import DashboardCard from '../../components/DashboardCard/DashboardCard';
@@ -11,29 +12,20 @@ const FacultyDashboard = () => {
       <div className="flex-grow-1">
         <TopBar />
         <main className="container-fluid py-4">
-          <h1 className="fw-bold mb-2" style={{ color: '#1a237e' }}>Faculty Dashboard</h1>
-          <p className="text-muted mb-4">Welcome back, Faculty!</p>
-          <div className="row g-3 mb-4">
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="My Classes" value={6} icon="bi-journal-bookmark" />
-              </InteractiveCard>
+          <div className="d-flex flex-column align-items-center justify-content-center text-center perspective-1000" style={{ minHeight: '70vh' }}>
+            <div className="spin-3d-viewport">
+              <div className="spin-3d-inner">
+                <div className="spin-3d-face spin-3d-front">
+                  <Image src="/gwclogo.png" alt="GWC Logo" fill priority style={{ objectFit: 'contain' }} />
+                </div>
+                <div className="spin-3d-face spin-3d-back">
+                  {/* Flip horizontally so the logo reads correctly when the back faces forward */}
+                  <Image src="/gwclogo.png" alt="GWC Logo" fill priority style={{ objectFit: 'contain', transform: 'scaleX(-1)' }} />
+                </div>
+              </div>
             </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Attendance Rate" value="97%" icon="bi-clipboard-check" />
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Leaves Taken" value={2} icon="bi-calendar-x" />
-              </InteractiveCard>
-            </div>
-            <div className="col-md-3">
-              <InteractiveCard>
-                <DashboardCard title="Certificates" value={3} icon="bi-award" />
-              </InteractiveCard>
-            </div>
+            <h1 className="fw-bold mt-3" style={{ color: '#1a237e' }}>Faculty Dashboard</h1>
+            <p className="text-muted mb-0">Welcome back, Faculty!</p>
           </div>
         </main>
       </div>
