@@ -12,9 +12,9 @@ interface EvaluationAnswer {
 interface QuestionSummary {
   question_id: number;
   question_text: string;
-  average_rating: number;
+  average_rating: number | null; // can be null from API
   total_responses: number;
-  ratings_breakdown: { [rating: number]: number };
+  ratings_breakdown?: { [rating: number]: number } | null;
 }
 
 interface EvaluationData {
@@ -26,7 +26,7 @@ interface EvaluationData {
   status: string;
   questions: QuestionSummary[];
   total_students: number;
-  overall_average: number;
+  overall_average: number | null; // can be null from API
 }
 
 interface EvaluationDataViewerProps {
@@ -52,9 +52,11 @@ function renderStars(rating: number) {
 }
 
 function calculateAverageRating(questions: QuestionSummary[]): number {
-  if (questions.length === 0) return 0;
-  const sum = questions.reduce((total, question) => total + question.average_rating, 0);
-  return parseFloat((sum / questions.length).toFixed(1));
+  if (!questions || questions.length === 0) return 0;
+  const nums = questions.map(q => Number(q.average_rating ?? 0));
+  const sum = nums.reduce((total, n) => total + (Number.isFinite(n) ? n : 0), 0);
+  const avg = nums.length ? sum / nums.length : 0;
+  return parseFloat(avg.toFixed(1));
 }
 
 function formatDate(dateStr: string): string {
@@ -78,6 +80,10 @@ export default function EvaluationDataViewer({
   const [evaluationData, setEvaluationData] = useState<EvaluationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showComments, setShowComments] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState("");
+  const [comments, setComments] = useState<Array<{ id: number; student_id: string; question_id: number; remarks: string }>>([]);
 
   useEffect(() => {
     fetchEvaluationData();
@@ -130,6 +136,30 @@ export default function EvaluationDataViewer({
       setError(err.message || 'Failed to load evaluation data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openComments = async () => {
+    setCommentsLoading(true);
+    setCommentsError("");
+    setShowComments(true);
+    try {
+      const { apiFetch } = await import('../../../apiFetch');
+      const res = await apiFetch(`/api/proxy/evaluation_answers/${evaluationId}`, { headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed to fetch comments' }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const rows = await res.json();
+      const filtered = (Array.isArray(rows) ? rows : [])
+        .filter((r: any) => [21,22,23].includes(Number(r.question_id)) && typeof r.remarks === 'string' && r.remarks.trim() !== '')
+        .map((r: any) => ({ id: r.id, student_id: String(r.student_id), question_id: Number(r.question_id), remarks: String(r.remarks) }));
+      setComments(filtered);
+    } catch (err: any) {
+      setCommentsError(err.message || 'Failed to load comments');
+      setComments([]);
+    } finally {
+      setCommentsLoading(false);
     }
   };
 
@@ -190,7 +220,9 @@ export default function EvaluationDataViewer({
     );
   }
 
-  const averageRating = evaluationData.overall_average || calculateAverageRating(evaluationData.questions);
+  const averageRating = Number(
+    (evaluationData.overall_average ?? calculateAverageRating(evaluationData.questions))
+  );
 
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -280,9 +312,9 @@ export default function EvaluationDataViewer({
                           </div>
                           <div className="text-end">
                             <div className="d-flex flex-column align-items-end">
-                              {renderStars(Math.round(question.average_rating))}
+                              {renderStars(Math.round(Number(question.average_rating ?? 0)))}
                               <div className="fw-bold text-primary mt-1">
-                                {question.average_rating.toFixed(1)}/5.0
+                                {Number(Number(question.average_rating ?? 0).toFixed(1))}/5.0
                               </div>
                             </div>
                           </div>
@@ -293,7 +325,8 @@ export default function EvaluationDataViewer({
                           <small className="text-muted fw-bold">Rating Distribution:</small>
                           <div className="d-flex gap-2 mt-1 flex-wrap">
                             {[5, 4, 3, 2, 1].map(rating => {
-                              const count = question.ratings_breakdown[rating] || 0;
+                              const breakdown = question.ratings_breakdown || {};
+                              const count = (breakdown as any)[rating] || 0;
                               const percentage = question.total_responses > 0 ? (count / question.total_responses * 100).toFixed(0) : 0;
                               return (
                                 <div key={rating} className="text-center">
@@ -320,6 +353,14 @@ export default function EvaluationDataViewer({
           <div className="modal-footer border-0 bg-light">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Close
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-primary"
+              onClick={openComments}
+            >
+              <i className="bi bi-chat-dots me-2"></i>
+              View Comments
             </button>
             <button 
               type="button" 
@@ -360,6 +401,54 @@ export default function EvaluationDataViewer({
               <i className="bi bi-download me-2"></i>
               Export Data
             </button>
+          </div>
+        </div>
+      </div>
+      {/* Comments modal mount */}
+      <CommentsModal open={showComments} onClose={() => setShowComments(false)} loading={commentsLoading} error={commentsError} comments={comments} />
+    </div>
+  );
+}
+
+// Comments Modal
+function CommentsModal({ open, onClose, loading, error, comments }: { open: boolean; onClose: () => void; loading: boolean; error: string; comments: Array<{ id: number; student_id: string; question_id: number; remarks: string }>; }) {
+  if (!open) return null;
+  const labelFor = (qid: number) => (qid === 21 ? 'Comments' : 'Remarks');
+  return (
+    <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="modal-dialog modal-lg">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title"><i className="bi bi-chat-dots me-2"></i>Evaluator Comments</h5>
+            <button type="button" className="btn-close" onClick={onClose}></button>
+          </div>
+          <div className="modal-body">
+            {loading ? (
+              <div className="text-center py-4">
+                <div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div>
+                <div className="mt-2">Loading comments...</div>
+              </div>
+            ) : error ? (
+              <div className="alert alert-danger"><i className="bi bi-exclamation-triangle me-2"></i>{error}</div>
+            ) : comments.length === 0 ? (
+              <div className="text-center text-muted py-4"><i className="bi bi-inbox me-2"></i>No comments found.</div>
+            ) : (
+              <div className="list-group">
+                {comments.map(c => (
+                  <div key={c.id} className="list-group-item list-group-item-action">
+                    <div className="d-flex justify-content-between align-items-start">
+                      <div>
+                        <div className="small text-muted fw-bold">{labelFor(c.question_id)} • Student: {c.student_id}</div>
+                        <div className="mt-1" style={{ whiteSpace: 'pre-wrap' }}>{c.remarks}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
           </div>
         </div>
       </div>
