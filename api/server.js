@@ -744,7 +744,7 @@ app.post('/evaluation_answers', async (req, res) => {
 // Get all answers for an evaluation
 app.get('/evaluation_answers/:evaluation_id', async (req, res) => {
   try {
-    const [rows] = await db.execute(
+    const [rows] = await db.promise().query(
       'SELECT * FROM evaluation_answers WHERE evaluation_id = ?',
       [req.params.evaluation_id]
     );

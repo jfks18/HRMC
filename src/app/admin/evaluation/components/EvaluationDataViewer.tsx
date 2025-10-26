@@ -220,8 +220,10 @@ export default function EvaluationDataViewer({
     );
   }
 
+  // Exclude free-text Comments question (ID 21) from rated display/averages
+  const questionsForDisplay = (evaluationData.questions || []).filter(q => q.question_id !== 21);
   const averageRating = Number(
-    (evaluationData.overall_average ?? calculateAverageRating(evaluationData.questions))
+    (evaluationData.overall_average ?? calculateAverageRating(questionsForDisplay))
   );
 
   return (
@@ -298,7 +300,7 @@ export default function EvaluationDataViewer({
               </div>
               <div className="card-body">
                 <div className="row g-3">
-                  {evaluationData.questions.map((question, index) => (
+                  {questionsForDisplay.map((question, index) => (
                     <div key={question.question_id} className="col-12">
                       <div className="border rounded p-3 bg-light">
                         <div className="d-flex justify-content-between align-items-start mb-2">
