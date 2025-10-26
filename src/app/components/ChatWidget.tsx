@@ -30,6 +30,13 @@ export default function ChatWidget() {
   const [typingUser, setTypingUser] = useState<User | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const attemptedWebsocket = useRef(false);
+  const seenMessagesRef = useRef<Set<string>>(new Set());
+
+  const getMsgKey = (m: Message): string => {
+    if (m && m.id != null) return `id:${m.id}`;
+    if (m && m.cid) return `cid:${m.cid}`;
+    return `t:${m.created_at}|${m.sender_id}|${m.message}`;
+  };
 
   // read token from localStorage or cookie (adjust to your auth)
   function getToken() {
@@ -40,6 +47,8 @@ export default function ChatWidget() {
   }
 
   useEffect(() => {
+    if (attemptedWebsocket.current) return; // avoid double-init in dev StrictMode
+    attemptedWebsocket.current = true;
     // connect socket.io client
     const token = getToken();
     // include the ngrok skip header in transportOptions where supported (polling)
@@ -72,8 +81,36 @@ export default function ChatWidget() {
     });
 
     client.on('new_message', (m: Message) => {
-      // if message belongs to active room append, otherwise ignore (could update dm list badge)
-      if (m.room === activeRoomRef.current) setMessages(prev => [...prev, m]);
+      // if message belongs to active room, reconcile into list; otherwise ignore
+      if (m.room === activeRoomRef.current) {
+        const key = getMsgKey(m);
+        if (seenMessagesRef.current.has(key)) return;
+        setMessages(prev => {
+          const next = prev.slice();
+          // Prefer replacement by id
+          if (m.id != null) {
+            const byId = next.findIndex(x => x.id === m.id);
+            if (byId >= 0) {
+              next[byId] = m;
+              seenMessagesRef.current.add(key);
+              return next;
+            }
+          }
+          // Or replacement by cid (if server echoes cid)
+          if (m.cid) {
+            const byCid = next.findIndex(x => x.cid && x.cid === m.cid);
+            if (byCid >= 0) {
+              next[byCid] = m;
+              seenMessagesRef.current.add(key);
+              return next;
+            }
+          }
+          // Else append
+          seenMessagesRef.current.add(key);
+          next.push(m);
+          return next;
+        });
+      }
       // update DM listing (simple refresh)
       fetchDms(client);
     });
@@ -127,7 +164,12 @@ export default function ChatWidget() {
       setActiveRoom(room);
       setMessages([]);
       socket.emit('get_history', { room, limit: 200 }, (res: any) => {
-        if (res && res.success && Array.isArray(res.messages)) setMessages(res.messages);
+        if (res && res.success && Array.isArray(res.messages)) {
+          const seeded = new Set<string>(seenMessagesRef.current);
+          for (const m of res.messages) seeded.add(getMsgKey(m));
+          seenMessagesRef.current = seeded;
+          setMessages(res.messages);
+        }
       });
     } catch (e) { /* ignore */ }
   }
@@ -138,6 +180,8 @@ export default function ChatWidget() {
     const payload = { room: activeRoom, message: text.trim(), cid };
     // optimistic update
     const optimistic: Message = { id: null, room: activeRoom, message: text.trim(), sender_id: null, sender_name: 'You', cid, created_at: new Date().toISOString() };
+    // mark as seen so server echo won't duplicate
+    seenMessagesRef.current.add(getMsgKey(optimistic));
     setMessages(prev => [...prev, optimistic]);
     setText('');
     // ensure we're joined to the room so we receive broadcasts
@@ -146,7 +190,22 @@ export default function ChatWidget() {
     socket.emit('send_message', payload, (ack: any) => {
       // optionally reconcile saved message
       if (ack && ack.success && ack.message) {
-        setMessages(prev => prev.map(m => (m.cid === cid ? ack.message : m)));
+        setMessages(prev => {
+          const next = prev.slice();
+          const idx = next.findIndex(m => m.cid === cid);
+          if (idx >= 0) next[idx] = ack.message;
+          // dedupe by id if multiple entries exist
+          if (ack.message.id != null) {
+            const id = ack.message.id;
+            const firstIdx = next.findIndex(x => x.id === id);
+            for (let i = next.length - 1; i >= 0; i--) {
+              if (i !== firstIdx && next[i] && next[i].id === id) next.splice(i, 1);
+            }
+          }
+          // record server id to dedupe further echoes
+          try { seenMessagesRef.current.add(getMsgKey(ack.message)); } catch {}
+          return next;
+        });
       }
     });
   }
@@ -190,7 +249,7 @@ export default function ChatWidget() {
       )}
 
       {visible && (
-        <div style={{ position: 'fixed', right: 20, bottom: 20, width: 360, maxWidth: 'calc(100% - 40px)', zIndex: 9999 }}>
+        <div style={{ position: 'fixed', right: 20, bottom: 20, width: 480, maxWidth: 'calc(100% - 40px)', zIndex: 9999 }}>
           <div className="card shadow">
             <div className="card-header d-flex justify-content-between align-items-center">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -205,9 +264,9 @@ export default function ChatWidget() {
                 </button>
               </div>
             </div>
-        <div className="card-body" style={{ maxHeight: 420, overflow: 'auto' }}>
+        <div className="card-body" style={{ maxHeight: 640, overflow: 'auto' }}>
           <div className="row">
-            <div className="col-5 border-end" style={{ maxHeight: 340, overflow: 'auto' }}>
+            <div className="col-5 border-end" style={{ maxHeight: 520, overflow: 'auto' }}>
               <h6>Conversations</h6>
               <ul className="list-group">
                 {dms.map(dm => (
@@ -246,7 +305,7 @@ export default function ChatWidget() {
               <div style={{ height: 40 }}>
                 <strong>{activeRoom || 'Select a conversation'}</strong>
               </div>
-              <div ref={scrollRef} style={{ height: 260, overflow: 'auto', border: '1px solid #eee', padding: 8, background: '#fff' }}>
+              <div ref={scrollRef} style={{ height: 420, overflow: 'auto', border: '1px solid #eee', padding: 8, background: '#fff' }}>
                 {messages.map((m, i) => (
                   <div key={i} className={`mb-2 ${m.sender_name === 'You' ? 'text-end' : ''}`}>
                     <div><small className="text-muted">{m.sender_name || m.sender_id || 'Unknown'}</small></div>
