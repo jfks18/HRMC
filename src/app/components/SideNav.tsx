@@ -14,6 +14,30 @@ const navItems = [
 
 export default function SideNav() {
   const pathname = usePathname();
+  
+  // Get user info from localStorage
+  let userName = '';
+  let userRole = '';
+  if (typeof window !== 'undefined') {
+    userName = localStorage.getItem('userName') || '';
+    userRole = localStorage.getItem('userRole') || '';
+  }
+
+  // Generate initials from username
+  const getUserInitials = (name: string) => {
+    if (!name || name.trim() === '') return 'U';
+    const nameParts = name.trim().split(' ');
+    if (nameParts.length === 1) {
+      return nameParts[0].substring(0, 2).toUpperCase();
+    } else {
+      const firstInitial = nameParts[0].charAt(0).toUpperCase();
+      const lastInitial = nameParts[nameParts.length - 1].charAt(0).toUpperCase();
+      return firstInitial + lastInitial;
+    }
+  };
+
+  const userInitials = getUserInitials(userName);
+  
   return (
     <aside className="d-flex flex-column bg-white shadow-sm p-3" style={{ width: 260, minHeight: '100vh' }}>
       <div className="mb-4 d-flex align-items-center gap-2">
@@ -47,10 +71,21 @@ export default function SideNav() {
         })}
       </ul>
       <div className="mt-auto d-flex align-items-center gap-2 p-2 rounded bg-light">
-        <div className="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center" style={{ width: 36, height: 36 }}>
-          <span>SJ</span>
+        <div 
+          className="text-white rounded-circle d-flex align-items-center justify-content-center fw-semibold" 
+          style={{ 
+            width: 36, 
+            height: 36,
+            background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
+            fontSize: '0.875rem'
+          }}
+        >
+          <span>{userInitials}</span>
         </div>
-       
+        <div>
+          <div className="fw-semibold" style={{ color: '#1a237e' }}>{userName || 'User'}</div>
+          <div className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</div>
+        </div>
       </div>
     </aside>
   );

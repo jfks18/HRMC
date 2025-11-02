@@ -894,6 +894,45 @@ app.get('/evaluation_questions', async (req, res) => {
   }
 });
 
+// Check if student has already evaluated today
+app.get('/evaluation/check-student-today/:student_id', async (req, res) => {
+  const { student_id } = req.params;
+  
+  try {
+    // Check if student has any evaluation answers for today
+    const [rows] = await db.promise().query(`
+      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
+             e.teacher_id, u.name as teacher_name
+      FROM evaluation_answers ea
+      JOIN evaluation e ON ea.evaluation_id = e.id
+      LEFT JOIN users u ON e.teacher_id = u.id
+      WHERE ea.student_id = ? 
+      AND DATE(ea.created_at) = CURDATE()
+    `, [student_id]);
+    
+    if (rows.length > 0) {
+      return res.json({
+        hasEvaluated: true,
+        message: 'Student has already completed an evaluation today',
+        evaluations: rows.map(row => ({
+          evaluation_id: row.evaluation_id,
+          teacher_id: row.teacher_id,
+          teacher_name: row.teacher_name,
+          completed_at: row.created_at
+        }))
+      });
+    } else {
+      return res.json({
+        hasEvaluated: false,
+        message: 'Student can proceed with evaluation'
+      });
+    }
+  } catch (err) {
+    console.error('Error checking student evaluation status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /**
  * Get All Evaluation Questions (Alternative endpoint)
  * GET /evaluation_question

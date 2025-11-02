@@ -14,6 +14,8 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 	const [error, setError] = useState("");
 	const [incomplete, setIncomplete] = useState<number[]>([]);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+	const [lockedQuestions, setLockedQuestions] = useState<Set<number>>(new Set());
+	const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
 
 	useEffect(() => {
 		apiFetch('/api/proxy/evaluation_questions')
@@ -25,14 +27,32 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 				setResponses(mapped.map((q: any) => (q.id === 21 || q.id === 22 || q.id === 23) ? '' : undefined));
 				// Reset to first section when questions load
 				setCurrentSectionIndex(0);
+				// Reset locked questions
+				setLockedQuestions(new Set());
 			})
 			.catch(() => setQuestions([]));
 	}, []);
 
+	// Cleanup countdown interval on unmount
+	useEffect(() => {
+		return () => {
+			setRedirectCountdown(null);
+		};
+	}, []);
+
 	const handleChange = (idx: number, value: number) => {
+		// Don't allow changes if question is locked
+		if (lockedQuestions.has(idx)) {
+			return;
+		}
+		
 		const updated = [...responses];
 		updated[idx] = value;
 		setResponses(updated);
+		
+		// Lock the question after answering
+		setLockedQuestions(prev => new Set(prev).add(idx));
+		
 		// clear incomplete flag for this question when answered
 		if (incomplete.includes(idx)) {
 			setIncomplete(prev => prev.filter(i => i !== idx));
@@ -41,11 +61,35 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 
 	// handle remarks textarea change and clear incomplete flag
 	const handleRemarksChange = (idx: number, value: string) => {
+		// Don't allow changes if question is locked
+		if (lockedQuestions.has(idx)) {
+			return;
+		}
+		
 		const updated = [...responses];
 		updated[idx] = value;
 		setResponses(updated);
+		
+		// Lock the question after typing (with a small delay to allow typing)
+		if (value.trim() !== '') {
+			setTimeout(() => {
+				setLockedQuestions(prev => new Set(prev).add(idx));
+			}, 2000); // Lock after 2 seconds of no changes
+		}
+		
 		if (incomplete.includes(idx)) {
 			setIncomplete(prev => prev.filter(i => i !== idx));
+		}
+	};
+
+	// Function to unlock a question (with confirmation)
+	const handleUnlock = (idx: number) => {
+		if (window.confirm('Are you sure you want to unlock this question? You will be able to change your answer.')) {
+			setLockedQuestions(prev => {
+				const newSet = new Set(prev);
+				newSet.delete(idx);
+				return newSet;
+			});
 		}
 	};
 
@@ -95,8 +139,25 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 						});
 				await Promise.all(submitPromises);
 				setSubmitted(true);
-				// Redirect back to evaluation start (auth screen)
-				router.replace('/evaluation');
+				
+				// Start countdown and redirect
+				setRedirectCountdown(3);
+				const countdownInterval = setInterval(() => {
+					setRedirectCountdown(prev => {
+						if (prev === null || prev <= 1) {
+							clearInterval(countdownInterval);
+							// Clear all states and redirect back to evaluation start (auth screen)
+							setResponses([]);
+							setLockedQuestions(new Set());
+							setError("");
+							setIncomplete([]);
+							setCurrentSectionIndex(0);
+							router.replace('/evaluation');
+							return null;
+						}
+						return prev - 1;
+					});
+				}, 1000);
 			} catch (err) {
 				const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
 				setError(`Failed to submit evaluation: ${errorMessage}`);
@@ -209,35 +270,106 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 												<label style={{ fontWeight: 700, color: "#263238", marginBottom: 10, display: "block", fontSize: "1.08rem" }}>{q.id}. {q.text}</label>
 												{q.id === 21 || q.id === 22 || q.id === 23 ? (
 													<>
-														<label style={{ fontWeight: 600, color: "#1976d2", marginBottom: 6, display: "block" }}>{q.id === 21 ? 'Comments' : 'Remarks'}</label>
+														<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+															<label style={{ fontWeight: 600, color: "#1976d2" }}>{q.id === 21 ? 'Comments' : 'Remarks'}</label>
+															{lockedQuestions.has(idx) && (
+																<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+																	<div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#e53935', fontSize: '0.9rem', fontWeight: 600 }}>
+																		<span>🔒</span> Locked
+																	</div>
+																	<button
+																		type="button"
+																		onClick={() => handleUnlock(idx)}
+																		style={{
+																			background: '#ff9800',
+																			color: 'white',
+																			border: 'none',
+																			borderRadius: 4,
+																			padding: '2px 8px',
+																			fontSize: '0.8rem',
+																			cursor: 'pointer',
+																			fontWeight: 600
+																		}}
+																	>
+																		Unlock
+																	</button>
+																</div>
+															)}
+														</div>
 														<textarea
 															value={typeof responses[idx] === 'string' ? responses[idx] : ''}
 															onChange={e => handleRemarksChange(idx, e.target.value)}
 															rows={3}
 															placeholder={q.id === 21 ? 'Write your comments about the faculty member here...' : 'Add your remarks here...'}
-															style={{ width: "100%", borderRadius: 8, border: "1px solid #90caf9", padding: 10, fontSize: "1.08rem" }}
+															style={{ 
+																width: "100%", 
+																borderRadius: 8, 
+																border: "1px solid #90caf9", 
+																padding: 10, 
+																fontSize: "1.08rem",
+																backgroundColor: lockedQuestions.has(idx) ? '#f5f5f5' : '#fff',
+																cursor: lockedQuestions.has(idx) ? 'not-allowed' : 'text'
+															}}
+															disabled={lockedQuestions.has(idx)}
 															required
 														/>
 														{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
 													</>
 												) : (
-													<div style={{ display: "flex", gap: 18, marginTop: 8, flexWrap: 'wrap' }}>
-														{[1,2,3,4,5].map(rating => (
-															<label key={rating} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer" }}>
-																<input
-																	type="radio"
-																	name={`q${q.id}`}
-																	value={rating}
-																	checked={responses[idx] === rating}
-																	onChange={() => handleChange(idx, rating)}
-																	required
-																	style={{ accentColor: "#1976d2", width: 22, height: 22, marginBottom: 2 }}
-																/>
-																<span style={{ fontWeight: 600, color: responses[idx] === rating ? "#1976d2" : "#78909c", fontSize: "1.08rem" }}>{rating}</span>
-															</label>
-														))}
-														{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
-													</div>
+													<>
+														{lockedQuestions.has(idx) && (
+															<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+																<span style={{ color: '#e53935', fontSize: '0.9rem', fontWeight: 600 }}>🔒 Answer locked - cannot be changed</span>
+																<button
+																	type="button"
+																	onClick={() => handleUnlock(idx)}
+																	style={{
+																		background: '#ff9800',
+																		color: 'white',
+																		border: 'none',
+																		borderRadius: 4,
+																		padding: '4px 12px',
+																		fontSize: '0.8rem',
+																		cursor: 'pointer',
+																		fontWeight: 600
+																	}}
+																>
+																	Unlock
+																</button>
+															</div>
+														)}
+														<div style={{ display: "flex", gap: 18, marginTop: 8, flexWrap: 'wrap' }}>
+															{[1,2,3,4,5].map(rating => (
+																<label key={rating} style={{ 
+																	display: "flex", 
+																	flexDirection: "column", 
+																	alignItems: "center", 
+																	gap: 4, 
+																	cursor: lockedQuestions.has(idx) ? "not-allowed" : "pointer",
+																	opacity: lockedQuestions.has(idx) ? 0.6 : 1
+																}}>
+																	<input
+																		type="radio"
+																		name={`q${q.id}`}
+																		value={rating}
+																		checked={responses[idx] === rating}
+																		onChange={() => handleChange(idx, rating)}
+																		disabled={lockedQuestions.has(idx)}
+																		required
+																		style={{ 
+																			accentColor: "#1976d2", 
+																			width: 22, 
+																			height: 22, 
+																			marginBottom: 2,
+																			cursor: lockedQuestions.has(idx) ? "not-allowed" : "pointer"
+																		}}
+																	/>
+																	<span style={{ fontWeight: 600, color: responses[idx] === rating ? "#1976d2" : "#78909c", fontSize: "1.08rem" }}>{rating}</span>
+																</label>
+															))}
+															{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
+														</div>
+													</>
 												)}
 											</div>
 										);
@@ -276,7 +408,26 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 								</div>
 
 				{error && <div style={{ color: "#e53935", marginTop: 18, fontWeight: 700, fontSize: "1.08rem" }}>{error}</div>}
-				{submitted && <div style={{ color: "#2e7d32", marginTop: 18, fontWeight: 700, fontSize: "1.08rem" }}>Thank you for your evaluation!</div>}
+				{submitted && (
+					<div style={{ 
+						color: "#2e7d32", 
+						marginTop: 18, 
+						fontWeight: 700, 
+						fontSize: "1.08rem",
+						padding: "16px",
+						background: "#e8f5e8",
+						borderRadius: "8px",
+						border: "2px solid #2e7d32",
+						textAlign: "center"
+					}}>
+						<div style={{ marginBottom: 8 }}>✅ Thank you for your evaluation!</div>
+						{redirectCountdown !== null && (
+							<div style={{ fontSize: "0.9rem", color: "#1b5e20" }}>
+								Redirecting to login page in {redirectCountdown} seconds...
+							</div>
+						)}
+					</div>
+				)}
 			</form>
 		</div>
 	);

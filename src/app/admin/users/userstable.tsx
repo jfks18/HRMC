@@ -142,7 +142,6 @@ export default function UsersTable({
         <table className="table align-middle">
           <thead>
             <tr>
-              <th>ID</th>
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
@@ -153,20 +152,12 @@ export default function UsersTable({
           <tbody>
             {filteredUsers.map(user => (
               <tr key={user.id}>
-                <td>{user.id}</td>
                 <td>{user.name}</td>
                 <td>{user.email}</td>
                 <td>{user.roleName}</td>
                 <td>{user.department_name || ''}</td>
                 <td>
                   <div className="d-flex gap-2">
-                            <button className="btn btn-sm btn-warning" onClick={() => {
-                              setSelectedUser(user);
-                              // Initialize selected dept from user's department_id
-                              const parsed = user.department_id ? Number(user.department_id) : NaN;
-                              setSelectedDept(Number.isFinite(parsed) ? parsed : '');
-                              setShowModal(true);
-                            }}>Assign Department</button>
                     <button className="btn btn-sm btn-danger" onClick={() => handleDelete(user)}>Delete</button>
                   </div>
                 </td>

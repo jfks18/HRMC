@@ -55,8 +55,8 @@ const StaffDashboard = () => {
                         </div>
                       </div>
                     </div>
-                    <h1 className="fw-bold mt-3" style={{ color: '#1a237e' }}>Faculty Dashboard</h1>
-                    <p className="text-muted mb-0">Welcome back, Faculty!</p>
+                    <h1 className="fw-bold mt-3" style={{ color: '#1a237e' }}>Staff Dashboard</h1>
+                    <p className="text-muted mb-0">Welcome back, {userName}!</p>
                   </div>
                 </main>
       </div>

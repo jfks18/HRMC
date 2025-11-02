@@ -56,7 +56,6 @@ const columns: TableColumn<AttendanceRecord>[] = [
   { key: 'user_name' as keyof AttendanceRecord, header: 'Employee', render: (_v, row) => (
     <div>
       <div className="fw-semibold">{row.user_name || String(row.user_id)}</div>
-      <div className="text-muted small">ID: {row.user_id}</div>
     </div>
   ) },
   { 
