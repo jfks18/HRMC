@@ -15,6 +15,8 @@ export default function EvaluationAuth() {
 		const [todayEvaluations, setTodayEvaluations] = useState<any[]>([]);
 		const [studentExists, setStudentExists] = useState<boolean | null>(null);
 		const [studentInfo, setStudentInfo] = useState<any>(null);
+		const [evaluationCompleted, setEvaluationCompleted] = useState<boolean | null>(null);
+		const [completedEvaluationInfo, setCompletedEvaluationInfo] = useState<any>(null);
 
 		// Check if student exists in database and evaluation status
 		const checkStudentEvaluationStatus = async (studentId: string) => {
@@ -65,6 +67,40 @@ export default function EvaluationAuth() {
 			}
 		};
 
+		// Check if specific evaluation is completed when both student ID and evaluation code are provided
+		const checkSpecificEvaluationCompletion = async (studentId: string, evaluationCode: string) => {
+			if (!studentId.trim() || !evaluationCode.trim()) {
+				setEvaluationCompleted(null);
+				setCompletedEvaluationInfo(null);
+				return;
+			}
+
+			// Find the evaluation ID from the password
+			const found = passwords.find(p => p.password === evaluationCode);
+			if (!found) {
+				setEvaluationCompleted(null);
+				setCompletedEvaluationInfo(null);
+				return;
+			}
+
+			try {
+				const response = await apiFetch(`/api/proxy/evaluation/check-student-evaluation/${encodeURIComponent(studentId.trim())}/${found.evaluation_id}`);
+				const data = await response.json();
+				
+				if (data.hasEvaluated) {
+					setEvaluationCompleted(true);
+					setCompletedEvaluationInfo(data);
+				} else {
+					setEvaluationCompleted(false);
+					setCompletedEvaluationInfo(null);
+				}
+			} catch (error) {
+				console.error('Error checking specific evaluation completion:', error);
+				setEvaluationCompleted(null);
+				setCompletedEvaluationInfo(null);
+			}
+		};
+
 		// Check student status when student ID changes
 		useEffect(() => {
 			const timeoutId = setTimeout(() => {
@@ -81,10 +117,23 @@ export default function EvaluationAuth() {
 					.catch(() => setPasswords([]));
 			}, []);
 
+		// Check specific evaluation completion when both student ID and evaluation code are provided
+		useEffect(() => {
+			if (passwords.length > 0) {
+				const timeoutId = setTimeout(() => {
+					checkSpecificEvaluationCompletion(studentId, evaluationCode);
+				}, 1000); // Debounce for 1 second
+				
+				return () => clearTimeout(timeoutId);
+			}
+		}, [studentId, evaluationCode, passwords]);
+
 			const handleSubmit = async (e: React.FormEvent) => {
 				e.preventDefault();
 				setError("");
 				setSuccess(false);
+				
+				// Basic validation
 				if (!studentId.trim()) {
 					setError("Student ID is required.");
 					return;
@@ -94,65 +143,56 @@ export default function EvaluationAuth() {
 					return;
 				}
 
-				// Check if student exists in database
-				if (studentExists === false) {
-					setError("Student ID not found in database. Please contact your administrator to add your student record first.");
-					return;
-				}
-
-				if (studentExists === null) {
-					setError("Please wait while we verify your student ID...");
-					return;
-				}
-
-				// First, validate the evaluation code to get evaluation_id
-				const found = passwords.find(p => p.password === evaluationCode);
-				if (!found) {
-					setError("Invalid Evaluation Code.");
-					return;
-				}
-
-				// Check if expires_at is in the past
-				if (found.expires_at) {
-					const expires = new Date(found.expires_at);
-					const now = new Date();
-					if (expires < now) {
-						setError("Expired Evaluation Code.");
-						return;
-					}
-				}
-
 				try {
-					// Check if student has already submitted this specific evaluation
-					const specificCheckResponse = await apiFetch(`/api/proxy/evaluation/check-student-evaluation/${encodeURIComponent(studentId.trim())}/${found.evaluation_id}`);
-					const specificCheckData = await specificCheckResponse.json();
-					
-					if (specificCheckData.hasEvaluated) {
-						const completedTime = new Date(specificCheckData.completed_at).toLocaleString();
-						setError(`You have already completed this evaluation for ${specificCheckData.teacher_name || 'this professor'}. Each student can only submit one response per evaluation. Completed at: ${completedTime}`);
+					// Use the new comprehensive validation endpoint
+					const response = await apiFetch('/api/proxy/evaluation/validate-login', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({
+							student_id: studentId.trim(),
+							evaluation_code: evaluationCode.trim()
+						}),
+					});
+
+					const validationResult = await response.json();
+
+					if (!validationResult.valid) {
+						// Handle different error cases with specific messages
+						switch (validationResult.error) {
+							case 'student_not_found':
+								setError("Student ID not found in database. Please contact your administrator to add your student record first.");
+								break;
+							case 'evaluation_not_found':
+								setError("Invalid evaluation code. Please check the code and try again.");
+								break;
+							case 'evaluation_expired':
+								const expiredDate = new Date(validationResult.evaluation.expires_at).toLocaleString();
+								setError(`This evaluation has expired on ${expiredDate}. Please contact your instructor for a new evaluation code.`);
+								break;
+							case 'already_completed':
+								const completedTime = new Date(validationResult.completion_details.completed_at).toLocaleString();
+								setError(`You have already completed this evaluation for ${validationResult.evaluation.teacher_name}. Each student can only submit one response per evaluation. Completed at: ${completedTime}`);
+								break;
+							default:
+								setError(validationResult.message || "Validation failed. Please try again.");
+								break;
+						}
 						return;
 					}
 
-					// Also check if student has already evaluated today (general check)
-					const checkResponse = await apiFetch(`/api/proxy/evaluation/check-student-today/${encodeURIComponent(studentId.trim())}`);
-					const checkData = await checkResponse.json();
-					
-					if (checkData.hasEvaluated) {
-						const lastEvaluation = checkData.evaluations[0];
-						const completedTime = new Date(lastEvaluation?.completed_at).toLocaleString();
-						setError(`You have already completed an evaluation today for ${lastEvaluation?.teacher_name || 'a professor'}. You can only submit one evaluation per day. Last evaluation completed at: ${completedTime}`);
-						return;
-					}
-				} catch (checkError) {
-					console.error('Error checking student evaluation status:', checkError);
-					setError("Unable to verify evaluation status. Please try again.");
-					return;
+					// Validation successful - proceed to evaluation form
+					console.log('Login validation successful:', validationResult);
+					setTeacherId(validationResult.evaluation.teacher_id);
+					setEvaluationId(validationResult.evaluation.id);
+					setStudentInfo(validationResult.student);
+					setSuccess(true);
+
+				} catch (error) {
+					console.error('Error during login validation:', error);
+					setError("Unable to validate your credentials. Please check your connection and try again.");
 				}
-
-				// If all checks pass, proceed with login
-				setTeacherId(found.teacher_id);
-				setEvaluationId(found.evaluation_id);
-				setSuccess(true);
 			};
 
 
@@ -249,28 +289,59 @@ export default function EvaluationAuth() {
 							type="text"
 							value={evaluationCode}
 							onChange={e => setEvaluationCode(e.target.value)}
-							style={{ width: "100%", padding: "1rem", borderRadius: "10px", border: "1px solid #b0bec5", marginBottom: 16, fontSize: "1.1rem", background: "#f5f7fa" }}
-							required
-						/>
-						<button 
-							type="submit" 
-							disabled={hasEvaluatedToday || studentExists === false}
 							style={{ 
 								width: "100%", 
 								padding: "1rem", 
 								borderRadius: "10px", 
-								background: (hasEvaluatedToday || studentExists === false) ? "#bdbdbd" : "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)", 
+								border: evaluationCompleted === true ? "2px solid #f44336" : "1px solid #b0bec5", 
+								marginBottom: evaluationCompleted === true ? 8 : 16, 
+								fontSize: "1.1rem", 
+								background: evaluationCompleted === true ? "#ffebee" : "#f5f7fa" 
+							}}
+							required
+						/>
+						{evaluationCompleted === true && completedEvaluationInfo && (
+							<div style={{ 
+								background: "#ffebee", 
+								border: "1px solid #f44336", 
+								borderRadius: "8px", 
+								padding: "12px", 
+								marginBottom: 16,
+								fontSize: "0.9rem",
+								color: "#c62828"
+							}}>
+								<div style={{ fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+									🚫 Evaluation Already Completed
+								</div>
+								<div style={{ fontSize: "0.85rem" }}>
+									You have already completed this evaluation for <strong>{completedEvaluationInfo.teacher_name || 'this professor'}</strong>.<br/>
+									Completed at: {new Date(completedEvaluationInfo.completed_at).toLocaleString()}<br/>
+									<span style={{ fontStyle: 'italic', marginTop: 4, display: 'block' }}>
+										Each student can only submit one response per evaluation.
+									</span>
+								</div>
+							</div>
+						)}
+						<button 
+							type="submit" 
+							disabled={hasEvaluatedToday || studentExists === false || evaluationCompleted === true}
+							style={{ 
+								width: "100%", 
+								padding: "1rem", 
+								borderRadius: "10px", 
+								background: (hasEvaluatedToday || studentExists === false || evaluationCompleted === true) ? "#bdbdbd" : "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)", 
 								color: "white", 
 								fontWeight: 700, 
 								fontSize: "1.15rem", 
 								border: "none", 
 								boxShadow: "0 2px 8px rgba(44,62,80,0.08)", 
-								cursor: (hasEvaluatedToday || studentExists === false) ? "not-allowed" : "pointer", 
+								cursor: (hasEvaluatedToday || studentExists === false || evaluationCompleted === true) ? "not-allowed" : "pointer", 
 								letterSpacing: 0.5,
-								opacity: (hasEvaluatedToday || studentExists === false) ? 0.6 : 1
+								opacity: (hasEvaluatedToday || studentExists === false || evaluationCompleted === true) ? 0.6 : 1
 							}}
 						>
-							{hasEvaluatedToday ? "Already Evaluated Today" : 
+							{evaluationCompleted === true ? "Evaluation Already Completed" :
+							 hasEvaluatedToday ? "Already Evaluated Today" : 
 							 studentExists === false ? "Student Not Found" : 
 							 "Login"}
 						</button>

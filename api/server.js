@@ -1070,6 +1070,140 @@ app.get('/evaluation/check-student-evaluation/:student_id/:evaluation_id', async
   }
 });
 
+// Validate student and evaluation for login - comprehensive check
+app.post('/evaluation/validate-login', async (req, res) => {
+  const { student_id, evaluation_code } = req.body;
+  
+  if (!student_id || !evaluation_code) {
+    return res.status(400).json({ 
+      error: 'Missing required fields', 
+      message: 'Both student ID and evaluation code are required' 
+    });
+  }
+  
+  try {
+    // Step 1: Check if student exists in students database
+    const [studentRows] = await db.promise().query(
+      'SELECT id, name, year, course FROM students WHERE id = ?',
+      [student_id]
+    );
+    
+    if (studentRows.length === 0) {
+      return res.json({
+        valid: false,
+        studentExists: false,
+        evaluationExists: false,
+        hasEvaluated: false,
+        message: 'Student ID not found in database. Only registered students can access evaluations.',
+        error: 'student_not_found'
+      });
+    }
+    
+    const student = studentRows[0];
+    
+    // Step 2: Check if evaluation code exists and get evaluation details
+    const [evaluationRows] = await db.promise().query(`
+      SELECT e.id, e.teacher_id, e.password, e.expires_at, e.status,
+             u.name as teacher_name
+      FROM evaluation e
+      LEFT JOIN users u ON e.teacher_id = u.id
+      WHERE e.id = ? OR e.password = ?
+    `, [evaluation_code, evaluation_code]);
+    
+    if (evaluationRows.length === 0) {
+      return res.json({
+        valid: false,
+        studentExists: true,
+        evaluationExists: false,
+        hasEvaluated: false,
+        student: student,
+        message: 'Invalid evaluation code. Please check the code and try again.',
+        error: 'evaluation_not_found'
+      });
+    }
+    
+    const evaluation = evaluationRows[0];
+    
+    // Step 3: Check if evaluation has expired
+    const now = new Date();
+    const expiryDate = new Date(evaluation.expires_at);
+    
+    if (now > expiryDate) {
+      return res.json({
+        valid: false,
+        studentExists: true,
+        evaluationExists: true,
+        hasEvaluated: false,
+        student: student,
+        evaluation: {
+          id: evaluation.id,
+          teacher_name: evaluation.teacher_name,
+          expires_at: evaluation.expires_at
+        },
+        message: 'This evaluation has expired and is no longer available.',
+        error: 'evaluation_expired'
+      });
+    }
+    
+    // Step 4: Check if student has already submitted answers for this evaluation
+    const [answerRows] = await db.promise().query(`
+      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
+             COUNT(ea.id) as answer_count
+      FROM evaluation_answers ea
+      WHERE ea.student_id = ? AND ea.evaluation_id = ?
+      GROUP BY ea.evaluation_id, ea.student_id, ea.created_at
+    `, [student_id, evaluation.id]);
+    
+    if (answerRows.length > 0) {
+      const completedEvaluation = answerRows[0];
+      return res.json({
+        valid: false,
+        studentExists: true,
+        evaluationExists: true,
+        hasEvaluated: true,
+        student: student,
+        evaluation: {
+          id: evaluation.id,
+          teacher_name: evaluation.teacher_name,
+          expires_at: evaluation.expires_at
+        },
+        completion_details: {
+          completed_at: completedEvaluation.created_at,
+          answer_count: completedEvaluation.answer_count
+        },
+        message: 'You have already completed this evaluation. Duplicate submissions are not allowed.',
+        error: 'already_completed'
+      });
+    }
+    
+    // Step 5: All validations passed - student can proceed
+    return res.json({
+      valid: true,
+      studentExists: true,
+      evaluationExists: true,
+      hasEvaluated: false,
+      student: student,
+      evaluation: {
+        id: evaluation.id,
+        teacher_id: evaluation.teacher_id,
+        teacher_name: evaluation.teacher_name,
+        expires_at: evaluation.expires_at,
+        status: evaluation.status
+      },
+      message: 'Validation successful. You can proceed with the evaluation.',
+      redirect_to: 'evaluation_form'
+    });
+    
+  } catch (err) {
+    console.error('Error in evaluation login validation:', err);
+    res.status(500).json({ 
+      error: 'Database error during validation', 
+      message: 'An error occurred while validating your credentials. Please try again.',
+      details: err.message 
+    });
+  }
+});
+
 // Get all questions for an evaluation
 app.get('/evaluation_question/:evaluation_id', async (req, res) => {
   try {
