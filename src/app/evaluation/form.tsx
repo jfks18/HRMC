@@ -82,16 +82,7 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 		}
 	};
 
-	// Function to unlock a question (with confirmation)
-	const handleUnlock = (idx: number) => {
-		if (window.confirm('Are you sure you want to unlock this question? You will be able to change your answer.')) {
-			setLockedQuestions(prev => {
-				const newSet = new Set(prev);
-				newSet.delete(idx);
-				return newSet;
-			});
-		}
-	};
+
 
 	// Function to completely reset the form to initial state
 	const resetFormToInitialState = () => {
@@ -282,26 +273,8 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 														<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
 															<label style={{ fontWeight: 600, color: "#1976d2" }}>{q.id === 21 ? 'Comments' : 'Remarks'}</label>
 															{lockedQuestions.has(idx) && (
-																<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-																	<div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#e53935', fontSize: '0.9rem', fontWeight: 600 }}>
-																		<span>🔒</span> Locked
-																	</div>
-																	<button
-																		type="button"
-																		onClick={() => handleUnlock(idx)}
-																		style={{
-																			background: '#ff9800',
-																			color: 'white',
-																			border: 'none',
-																			borderRadius: 4,
-																			padding: '2px 8px',
-																			fontSize: '0.8rem',
-																			cursor: 'pointer',
-																			fontWeight: 600
-																		}}
-																	>
-																		Unlock
-																	</button>
+																<div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#e53935', fontSize: '0.9rem', fontWeight: 600 }}>
+																	<span>🔒</span> Locked
 																</div>
 															)}
 														</div>
@@ -329,22 +302,6 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 														{lockedQuestions.has(idx) && (
 															<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
 																<span style={{ color: '#e53935', fontSize: '0.9rem', fontWeight: 600 }}>🔒 Answer locked - cannot be changed</span>
-																<button
-																	type="button"
-																	onClick={() => handleUnlock(idx)}
-																	style={{
-																		background: '#ff9800',
-																		color: 'white',
-																		border: 'none',
-																		borderRadius: 4,
-																		padding: '4px 12px',
-																		fontSize: '0.8rem',
-																		cursor: 'pointer',
-																		fontWeight: 600
-																	}}
-																>
-																	Unlock
-																</button>
 															</div>
 														)}
 														<div style={{ display: "flex", gap: 18, marginTop: 8, flexWrap: 'wrap' }}>

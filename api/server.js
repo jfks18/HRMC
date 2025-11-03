@@ -1031,6 +1031,45 @@ app.get('/evaluation/check-student-today/:student_id', async (req, res) => {
   }
 });
 
+// Check if student has already submitted for a specific evaluation
+app.get('/evaluation/check-student-evaluation/:student_id/:evaluation_id', async (req, res) => {
+  const { student_id, evaluation_id } = req.params;
+  
+  try {
+    // Check if student has already submitted answers for this specific evaluation
+    const [rows] = await db.promise().query(`
+      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
+             e.teacher_id, u.name as teacher_name, e.created_at as evaluation_created
+      FROM evaluation_answers ea
+      JOIN evaluation e ON ea.evaluation_id = e.id
+      LEFT JOIN users u ON e.teacher_id = u.id
+      WHERE ea.student_id = ? 
+      AND ea.evaluation_id = ?
+    `, [student_id, evaluation_id]);
+    
+    if (rows.length > 0) {
+      const evaluation = rows[0];
+      return res.json({
+        hasEvaluated: true,
+        message: 'Student has already completed this specific evaluation',
+        evaluation_id: evaluation.evaluation_id,
+        teacher_id: evaluation.teacher_id,
+        teacher_name: evaluation.teacher_name,
+        completed_at: evaluation.created_at,
+        evaluation_created: evaluation.evaluation_created
+      });
+    } else {
+      return res.json({
+        hasEvaluated: false,
+        message: 'Student can proceed with this evaluation'
+      });
+    }
+  } catch (err) {
+    console.error('Error checking student-specific evaluation status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all questions for an evaluation
 app.get('/evaluation_question/:evaluation_id', async (req, res) => {
   try {

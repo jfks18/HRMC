@@ -105,8 +105,35 @@ export default function EvaluationAuth() {
 					return;
 				}
 
+				// First, validate the evaluation code to get evaluation_id
+				const found = passwords.find(p => p.password === evaluationCode);
+				if (!found) {
+					setError("Invalid Evaluation Code.");
+					return;
+				}
+
+				// Check if expires_at is in the past
+				if (found.expires_at) {
+					const expires = new Date(found.expires_at);
+					const now = new Date();
+					if (expires < now) {
+						setError("Expired Evaluation Code.");
+						return;
+					}
+				}
+
 				try {
-					// Check if student has already evaluated today
+					// Check if student has already submitted this specific evaluation
+					const specificCheckResponse = await apiFetch(`/api/proxy/evaluation/check-student-evaluation/${encodeURIComponent(studentId.trim())}/${found.evaluation_id}`);
+					const specificCheckData = await specificCheckResponse.json();
+					
+					if (specificCheckData.hasEvaluated) {
+						const completedTime = new Date(specificCheckData.completed_at).toLocaleString();
+						setError(`You have already completed this evaluation for ${specificCheckData.teacher_name || 'this professor'}. Each student can only submit one response per evaluation. Completed at: ${completedTime}`);
+						return;
+					}
+
+					// Also check if student has already evaluated today (general check)
 					const checkResponse = await apiFetch(`/api/proxy/evaluation/check-student-today/${encodeURIComponent(studentId.trim())}`);
 					const checkData = await checkResponse.json();
 					
@@ -122,25 +149,13 @@ export default function EvaluationAuth() {
 					return;
 				}
 
-				// Validate against passwords from API
-				const found = passwords.find(p => p.password === evaluationCode);
-				if (found) {
-					// Check if expires_at is in the past
-					if (found.expires_at) {
-						const expires = new Date(found.expires_at);
-						const now = new Date();
-						if (expires < now) {
-							setError("Expired Evaluation Code.");
-							return;
-						}
-					}
-					setTeacherId(found.teacher_id);
-					setEvaluationId(found.evaluation_id);
-					setSuccess(true);
-				} else {
-					setError("Invalid Evaluation Code.");
-				}
+				// If all checks pass, proceed with login
+				setTeacherId(found.teacher_id);
+				setEvaluationId(found.evaluation_id);
+				setSuccess(true);
 			};
+
+
 			if (success) {
 				return <EvaluationForm studentId={studentId} teacherId={teacherId} evaluationId={evaluationId} />;
 			}
