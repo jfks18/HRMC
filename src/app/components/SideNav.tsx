@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { label: 'Dashboard', icon: 'bi-grid', href: '/admin/dashboard' },
   { label: 'User Management', icon: 'bi-people', href: '/admin/users' },
+  { label: 'Student Management', icon: 'bi-person-badge', href: '/admin/students' },
   { label: 'Time Tracking', icon: 'bi-clock-history', href: '/admin/attendance' },
   { label: 'Leave Management', icon: 'bi-calendar-check', href: '/admin/leave' },
   { label: 'Faculty Evaluation', icon: 'bi-star', href: '/admin/evaluation' },

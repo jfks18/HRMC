@@ -10,6 +10,7 @@
 
 
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
@@ -19,6 +20,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
+const nodemailer = require('nodemailer');
 
 
 const app = express();
@@ -29,30 +31,32 @@ const jwt = require('jsonwebtoken');
 dotenv.config();
 
 // Middleware
-// Configure CORS origins via env var so we can accept requests from ngrok or other origins
-// Set CORS_ORIGINS to a comma-separated list of allowed origins (e.g. "https://buck-leading-pipefish.ngrok-free.app,http://localhost:3000")
-const rawCorsOrigins = process.env.CORS_ORIGINS || 'https://active-upward-sunbeam.ngrok-free.app' || 'http://localhost:3000';
-const ALLOWED_ORIGINS = rawCorsOrigins.split(',').map(s => s.trim()).filter(Boolean);
+// Configure CORS to allow the known frontend and an optional NGROK_URL
+const allowedOrigins = [
+  process.env.NGROK_URL,
+  process.env.FRONTEND_URL || 'http://localhost:3000',
+  'https://active-upward-sunbeam.ngrok-free.app', "https://hrmc.onrender.com", "http://localhost:8081"
+].filter(Boolean);
+console.log('CORS allowed origins:', allowedOrigins.length ? allowedOrigins : 'any');
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow non-browser requests like curl/postman which have no origin
+    // allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS policy: This origin is not allowed: ' + origin));
+    if (allowedOrigins.length === 0) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    return callback(new Error('CORS policy: This origin is not allowed'));
   },
   credentials: true,
   allowedHeaders: [
-    'Origin',
-    'X-Requested-With',
-    'Content-Type',
-    'Accept',
-    'Authorization',
-    'ngrok-skip-browser-warning'
-  ],
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE']
+        'Origin',
+        'X-Requested-With',
+        'Content-Type',
+        'Accept',
+        'Authorization',
+        'ngrok-skip-browser-warning'
+    ],
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE']
 }));
   // JWT authentication middleware for protected routes
   // function authenticateToken(req, res, next) {
@@ -70,14 +74,63 @@ app.use(cors({
   // }
 
 app.use(express.json());
+app.use(cookieParser());
 app.use(morgan('dev'));
 app.use(helmet());
+// Debug middleware: capture and log responses with 400 or 404 for easier debugging
+app.use((req, res, next) => {
+  // hold original methods
+  const originalJson = res.json.bind(res);
+  const originalSend = res.send.bind(res);
+  const originalStatus = res.status.bind(res);
+
+  // store the body that will be sent
+  let responseBody;
+  res.json = (body) => {
+    responseBody = body;
+    return originalJson(body);
+  };
+  res.send = (body) => {
+    responseBody = body;
+    return originalSend(body);
+  };
+
+  // intercept status to know final status code
+  res.status = (code) => {
+    res.__statusCode = code;
+    return originalStatus(code);
+  };
+
+  // after response finished, check code and log if 400 or 404
+  res.on('finish', () => {
+    const statusCode = res.__statusCode || res.statusCode;
+    if (statusCode === 400 || statusCode === 404) {
+      try {
+        console.warn(`HTTP ${statusCode} -> ${req.method} ${req.originalUrl}`);
+        console.warn('  params:', req.params);
+        console.warn('  query :', req.query);
+        console.warn('  body  :', req.body);
+        console.warn('  response body:', responseBody);
+      } catch (e) {
+        console.warn('Error logging 400/404 details:', e);
+      }
+    }
+  });
+
+  next();
+});
 // JWT authentication middleware helper
 // Use this middleware selectively by passing `authenticateToken` to routes that require auth.
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Log the header for debugging (avoid printing full token in production)
+  if (!authHeader) {
+    console.warn('authenticateToken: missing Authorization header');
     return res.status(401).json({ error: 'Unauthorized: No token provided' });
+  }
+  if (!authHeader.startsWith('Bearer ')) {
+    console.warn('authenticateToken: Authorization header does not start with "Bearer " -', authHeader.slice(0, 30));
+    return res.status(401).json({ error: 'Unauthorized: Malformed Authorization header' });
   }
   const token = authHeader.split(' ')[1];
 
@@ -96,7 +149,8 @@ function authenticateToken(req, res, next) {
     req.user = jwt.verify(token, process.env.JWT_SECRET);
     next();
   } catch (err) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    console.warn('authenticateToken: jwt.verify failed:', err && err.message);
+    return res.status(401).json({ error: 'Unauthorized: Invalid token', details: err && err.message });
   }
 }
 // MySQL connection setup
@@ -115,6 +169,69 @@ db.connect((err) => {
   }
 });
 
+// Email configuration
+const createEmailTransporter = () => {
+  if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('Email configuration incomplete. Email sending will be disabled.');
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT || 587,
+    secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+};
+
+const emailTransporter = createEmailTransporter();
+
+// Email sending helper function
+const sendWelcomeEmail = async (email, name, password) => {
+  if (!emailTransporter) {
+    console.warn('Email transporter not configured. Skipping welcome email.');
+    return { success: false, error: 'Email not configured' };
+  }
+
+  const mailOptions = {
+    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    to: email,
+    subject: 'Welcome to HRMC - Your Account Credentials',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Welcome to HRMC System</h2>
+        <p>Hello <strong>${name}</strong>,</p>
+        <p>Your account has been successfully created in the HRMC system. Here are your login credentials:</p>
+        
+        <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Password:</strong> ${password}</p>
+        </div>
+        
+        <p style="color: #666;">
+          <strong>Important:</strong> Please keep this information secure and consider changing your password after your first login.
+        </p>
+        
+        <p>If you have any questions, please contact the HR department.</p>
+        
+        <p>Best regards,<br>HRMC Administration Team</p>
+      </div>
+    `
+  };
+
+  try {
+    const info = await emailTransporter.sendMail(mailOptions);
+    console.log('Welcome email sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Failed to send welcome email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 /**
  * API Health Check
  * GET /
@@ -130,11 +247,30 @@ app.get('/', (req, res) => {
  * Returns: List of all users
  */
 app.get('/users', (req, res) => {
-  db.query('SELECT u.id, u.name, u.email, COALESCE(r.name, "No Role") AS roleName  FROM users u LEFT JOIN roles r ON u.role_id = r.id', (err, results) => {
+  const sql = `
+    SELECT 
+      u.id,
+      u.name,
+      u.email,
+      u.code,
+      u.department_id,
+      COALESCE(r.name, 'No Role') AS roleName,
+      d.name AS department_name
+    FROM users u
+    LEFT JOIN roles r ON TRIM(CAST(u.role_id AS CHAR)) = TRIM(CAST(r.id AS CHAR))
+    LEFT JOIN department d ON TRIM(CAST(u.department_id AS CHAR)) = TRIM(CAST(d.id AS CHAR))
+  `;
+  db.query(sql, (err, results) => {
     if (err) {
       return res.status(500).json({ error: 'Database query error' });
     }
-    res.json(results);
+    // Ensure IDs are strings to avoid numeric coercion
+    const formatted = results.map(row => ({
+      ...row,
+      id: row.id != null ? String(row.id) : null,
+      department_id: row.department_id != null ? String(row.department_id) : null
+    }));
+    res.json(formatted);
   });
 });
 //get roles
@@ -209,23 +345,68 @@ app.get('/users/:id/name', (req, res) => {
  * Returns: Success message and userId
  */
 app.post('/users', async (req, res) => {
-  const { id, name, email, password, role_id, department_id, code } = req.body;
-  if (!id || !name || !email || !password) {
+  const { name, email, password, role_id, department_id, code } = req.body;
+  if (!name || !email || !password) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
+
+  // helper to generate 8-char hex id
+  const genId = () => crypto.randomBytes(4).toString('hex');
+
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const created_at = new Date();
     const sql = `INSERT INTO users (id, name, email, password, role_id, department_id, code, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`;
-    const values = [id, name, email, hashedPassword, role_id, department_id, code, created_at];
-    db.query(sql, values, (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database insert error', details: err });
+
+    // Try inserting with generated ids, retry on duplicate-id collisions
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const id = genId();
+      const values = [id, name, email, hashedPassword, role_id, department_id, code, created_at];
+      try {
+        const [result] = await db.promise().query(sql, values);
+        
+        // Send welcome email with credentials
+        const emailResult = await sendWelcomeEmail(email, name, password);
+        
+        const response = { 
+          message: 'User created', 
+          userId: id,
+          email_sent: emailResult.success
+        };
+        
+        if (!emailResult.success) {
+          console.warn(`User ${id} created but email failed:`, emailResult.error);
+          response.email_error = emailResult.error;
+        } else {
+          console.log(`Welcome email sent to ${email} for user ${id}`);
+        }
+        
+        return res.status(201).json(response);
+      } catch (err) {
+        // If duplicate entry, determine whether it's the id (primary) or other unique field (email/code)
+        if (err && err.code === 'ER_DUP_ENTRY') {
+          const msg = String(err.message || err.sqlMessage || '').toLowerCase();
+          // If duplicate is on primary key (id) then retry, otherwise return conflict
+          if (msg.includes('primary') || msg.includes('for key') && (msg.includes('id') || msg.includes("users.id"))) {
+            // id collision: try again
+            if (attempt === maxAttempts) {
+              return res.status(500).json({ error: 'Failed to generate unique id after multiple attempts' });
+            }
+            continue; // retry with a new id
+          }
+          // Duplicate on other unique field (likely email or code) — return 409
+          return res.status(409).json({ error: 'Duplicate entry', details: err.message });
+        }
+        // Other DB error
+        return res.status(500).json({ error: 'Database insert error', details: err.message || err });
       }
-      res.status(201).json({ message: 'User created', userId: id });
-    });
+    }
+
+    // If we fallthrough (shouldn't), return generic error
+    return res.status(500).json({ error: 'Unable to create user' });
   } catch (err) {
-    res.status(500).json({ error: 'Password hashing failed', details: err });
+    return res.status(500).json({ error: 'Password hashing failed', details: err.message || err });
   }
 });
 
@@ -254,25 +435,62 @@ app.post('/login', (req, res) => {
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
-    // Generate JWT
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role_id: user.role_id },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-    // Return user info (excluding password) and token
-    return res.status(200).json({
-      message: 'Login successful',
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role_id: user.role_id,
-        department_id: user.department_id
+    // Generate access token (short lived)
+    const accessToken = jwt.sign({ id: user.id, email: user.email, role_id: user.role_id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // Create a refresh token (opaque string) and persist
+    const refreshToken = crypto.randomBytes(48).toString('hex');
+    const refreshExpiry = new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)); // 30 days
+
+    const persistRefresh = (cb) => {
+      if (db && typeof db.query === 'function') {
+        // Ensure table exists then insert
+        const createSql = `CREATE TABLE IF NOT EXISTS refresh_tokens (token VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), expires_at DATETIME)`;
+        db.query(createSql, (createErr) => {
+          if (createErr) return cb(createErr);
+          db.query('INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)', [refreshToken, user.id, refreshExpiry], cb);
+        });
+      } else {
+        global.__refreshTokens = global.__refreshTokens || new Map();
+        global.__refreshTokens.set(refreshToken, { user_id: user.id, expires_at: refreshExpiry });
+        cb && cb(null);
       }
+    };
+
+    persistRefresh((persistErr) => {
+      if (persistErr) console.warn('persist refresh token failed', persistErr);
+      // set refresh token cookie
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        expires: refreshExpiry
+      });
+      return res.status(200).json({ message: 'Login successful', token: accessToken, user: { id: user.id, name: user.name, email: user.email, role_id: user.role_id, department_id: user.department_id } });
     });
   });
+});
+
+// Refresh endpoint: issues a new access token when refresh cookie is present
+app.post('/auth/refresh', (req, res) => {
+  const rtoken = req.cookies && req.cookies.refreshToken;
+  if (!rtoken) return res.status(401).json({ error: 'no_refresh' });
+  if (db && typeof db.query === 'function') {
+    db.query('SELECT user_id, expires_at FROM refresh_tokens WHERE token = ?', [rtoken], (err, rows) => {
+      if (err) return res.status(500).json({ error: 'db' });
+      if (!rows || rows.length === 0) return res.status(401).json({ error: 'invalid_refresh' });
+      const rec = rows[0];
+      if (new Date(rec.expires_at) < new Date()) return res.status(401).json({ error: 'refresh_expired' });
+      const newAccess = jwt.sign({ id: rec.user_id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      return res.json({ accessToken: newAccess });
+    });
+  } else {
+    global.__refreshTokens = global.__refreshTokens || new Map();
+    const rec = global.__refreshTokens.get(rtoken);
+    if (!rec) return res.status(401).json({ error: 'invalid_refresh' });
+    if (new Date(rec.expires_at) < new Date()) return res.status(401).json({ error: 'refresh_expired' });
+    const newAccess = jwt.sign({ id: rec.user_id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    return res.json({ accessToken: newAccess });
+  }
 });
 
 /**
@@ -321,28 +539,13 @@ app.post('/leave_request', (req, res) => {
  * Returns: List of all leave requests
  */
 app.get('/leave_request', (req, res) => {
-   // Compute textual status from is_approve if status column is null to keep API consistent
    const sql = `
-    SELECT
-      lr.id,
-      lr.user_id,
-      lr.type,
-      lr.start_date,
-      lr.end_date,
-      lr.days,
-      lr.reason,
-      lr.is_approve,
-      COALESCE(lr.status,
-        CASE WHEN lr.is_approve IS NULL THEN 'pending' WHEN lr.is_approve = 1 THEN 'approved' ELSE 'disapproved' END
-      ) AS status,
-      lr.created_at,
-      u.name AS employee_name
+    SELECT lr.*, u.name AS employee_name
     FROM leave_request lr
     LEFT JOIN users u ON lr.user_id = u.id
   `;
   db.query(sql, (err, results) => {
     if (err) {
-      console.error('Leave /leave_request query error:', err);
       return res.status(500).json({ error: 'Database query error' });
     }
     res.json(results);
@@ -356,25 +559,7 @@ app.get('/leave_request', (req, res) => {
  */
 app.get('/leave_request/user/:user_id', (req, res) => {
   const user_id = req.params.user_id;
-  const sql = `
-    SELECT
-      lr.id,
-      lr.user_id,
-      lr.type,
-      lr.start_date,
-      lr.end_date,
-      lr.days,
-      lr.reason,
-      lr.is_approve,
-      COALESCE(lr.status,
-        CASE WHEN lr.is_approve IS NULL THEN 'pending' WHEN lr.is_approve = 1 THEN 'approved' ELSE 'disapproved' END
-      ) AS status,
-      lr.created_at
-    FROM leave_request lr
-    WHERE lr.user_id = ?
-    ORDER BY lr.created_at DESC
-  `;
-  db.query(sql, [user_id], (err, results) => {
+  db.query('SELECT * FROM leave_request WHERE user_id = ?', [user_id], (err, results) => {
     if (err) {
       return res.status(500).json({ error: 'Database query error' });
     }
@@ -433,25 +618,38 @@ app.delete('/leave_request/:id', (req, res) => {
  */
 app.patch('/leave_request/:id/approve', (req, res) => {
   const id = req.params.id;
-  const { is_approve } = req.body;
-  
-  if (is_approve === undefined || is_approve === null) {
-    return res.status(400).json({ error: 'is_approve field is required' });
-  }
-  // Also update the textual status field so frontend reads the same state on refresh
-  const statusText = is_approve ? 'approved' : 'disapproved';
-  const sql = `UPDATE leave_request SET is_approve = ?, status = ? WHERE id = ?`;
-  const values = [is_approve, statusText, id];
+ 
+
+  const sql = `UPDATE leave_request SET is_approve = 1, status = 'approved' WHERE id = ?`;
+  const values = [id];
 
   db.query(sql, values, (err, result) => {
     if (err) {
-      console.error('Error updating leave_request approval:', err);
       return res.status(500).json({ error: 'Database update error', details: err });
     }
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Leave request not found' });
     }
-    res.json({ message: `Leave request ${statusText}` });
+    res.json({ message: 'Leave request approved' });
+  });
+});
+
+app.patch('/leave_request/:id/disapprove', (req, res) => {
+  const id = req.params.id;
+
+
+  const sql = `UPDATE leave_request SET is_approve = 0, status = 'disapproved' WHERE id = ?`;
+  const values = [id];
+
+  db.query(sql, values, (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database update error', details: err });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Leave request not found' });
+    }
+
+    res.json({ message: 'Leave request disapproved' });
   });
 });
 
@@ -463,24 +661,7 @@ app.patch('/leave_request/:id/approve', (req, res) => {
  */
 app.get('/leave_request/:id', (req, res) => {
   const id = req.params.id;
-  const sql = `
-    SELECT
-      lr.id,
-      lr.user_id,
-      lr.type,
-      lr.start_date,
-      lr.end_date,
-      lr.days,
-      lr.reason,
-      lr.is_approve,
-      COALESCE(lr.status,
-        CASE WHEN lr.is_approve IS NULL THEN 'pending' WHEN lr.is_approve = 1 THEN 'approved' ELSE 'disapproved' END
-      ) AS status,
-      lr.created_at
-    FROM leave_request lr
-    WHERE lr.id = ?
-  `;
-  db.query(sql, [id], (err, results) => {
+  db.query('SELECT * FROM leave_request WHERE id = ?', [id], (err, results) => {
     if (err) {
       return res.status(500).json({ error: 'Database query error' });
     }
@@ -514,27 +695,6 @@ app.patch('/leave_request/:id/cancel', (req, res) => {
 });
 
 /**
- * Disapprove Leave Request
- * PATCH /leave_request/:id/disapprove
- * Sets is_approve = 0 and status = 'disapproved'
- */
-app.patch('/leave_request/:id/disapprove', (req, res) => {
-  const id = req.params.id;
-
-  const sql = `UPDATE leave_request SET is_approve = 0, status = 'disapproved' WHERE id = ?`;
-  db.query(sql, [id], (err, result) => {
-    if (err) {
-      console.error('Error disapproving leave_request:', err);
-      return res.status(500).json({ error: 'Database update error', details: err });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Leave request not found' });
-    }
-    res.json({ message: 'Leave request disapproved successfully' });
-  });
-});
-
-/**
  * Create Attendance Record
  * POST /attendance
  * Body: { user_id, time_in, time_out, status, late_minutes, date }
@@ -561,15 +721,18 @@ app.post('/attendance', (req, res) => {
  */
 app.get('/attendance', (req, res) => {
   // join users to include the user's display name
+  // Use TRIM(CAST(... AS CHAR)) to normalize IDs so varchar/whitespace mismatches don't hide the user name
   const sql = `
-    SELECT a.id, a.user_id, COALESCE(u.name, u.email, CONCAT(u.id, '')) AS user_name,
-           a.time_in, a.time_out, a.status, a.late_minutes, a.date
+    SELECT a.id, a.user_id, TRIM(CAST(u.name AS CHAR)) AS user_name,
+      COALESCE(TRIM(CAST(u.name AS CHAR)), TRIM(CAST(a.user_id AS CHAR))) AS display_name,
+      a.time_in, a.time_out, a.status, a.late_minutes, a.date
     FROM attendance a
-    LEFT JOIN users u ON a.user_id = u.id
+    LEFT JOIN users u ON TRIM(CAST(a.user_id AS CHAR)) = TRIM(CAST(u.id AS CHAR))
     ORDER BY a.date DESC
   `;
   db.query(sql, (err, results) => {
     if (err) {
+      console.error('GET /attendance query error:', err);
       return res.status(500).json({ error: 'Database query error' });
     }
     res.json(results);
@@ -582,24 +745,83 @@ app.get('/attendance', (req, res) => {
  * Returns: Array of attendance records for the user
  */
 app.get('/attendance/user/:user_id', (req, res) => {
-  const user_id = req.params.user_id;
+  // normalize incoming id to a trimmed string to avoid mismatches
+  const user_id = String(req.params.user_id).trim();
   const sql = `
-    SELECT a.id, a.user_id, COALESCE(u.name, u.email, CONCAT(u.id, '')) AS user_name,
+    SELECT a.id, a.user_id, TRIM(CAST(u.name AS CHAR)) AS user_name,
            a.time_in, a.time_out, a.status, a.late_minutes, a.date
-    FROM attendance a
-    LEFT JOIN users u ON a.user_id = u.id
-    WHERE a.user_id = ?
+  FROM attendance a
+  LEFT JOIN users u ON TRIM(CAST(a.user_id AS CHAR)) = TRIM(CAST(u.id AS CHAR))
+    WHERE TRIM(CAST(a.user_id AS CHAR)) = ?
     ORDER BY a.date DESC
   `;
+
   db.query(sql, [user_id], (err, results) => {
     if (err) {
       console.error(`Attendance /attendance/user/${user_id} query error:`, err);
       return res.status(500).json({ error: 'Database query error' });
     }
+
     if (results.length === 0) {
-      return res.status(404).json({ error: 'No attendance records found for this user' });
+      // No attendance rows — still try to return the user's name so the UI can display it
+      db.query('SELECT id, name FROM users WHERE TRIM(CAST(id AS CHAR)) = ?', [user_id], (uerr, urows) => {
+        if (uerr) {
+          console.error('Error fetching user for attendance fallback:', uerr);
+          return res.status(500).json({ error: 'Database query error' });
+        }
+        if (urows.length === 0) {
+          return res.status(404).json({ error: 'User not found and no attendance records' });
+        }
+        const user = urows[0];
+        // Return a single fallback row with null attendance fields but with user_name filled
+        const fallback = [{
+          id: null,
+          user_id: user.id,
+          user_name: user.name,
+          time_in: null,
+          time_out: null,
+          status: null,
+          late_minutes: null,
+          date: null
+        }];
+        return res.json(fallback);
+      });
+      return;
     }
+
     res.json(results);
+  });
+});
+
+/**
+ * Get full attendance view (full outer join emulation)
+ * GET /attendance/full
+ * Returns: all attendance rows joined with users and also users without attendance
+ */
+app.get('/attendance/full', (req, res) => {
+  // By default return attendance rows annotated with user info (LEFT JOIN).
+  // If client requests include_missing=true then also include users with no attendance (full outer emulation).
+  const includeMissing = String(req.query.include_missing || '').toLowerCase() === 'true';
+
+  const leftSql = `
+    SELECT a.id AS attendance_id, a.user_id, u.name AS user_name, a.time_in, a.time_out, a.status, a.late_minutes, a.date
+    FROM attendance a
+    LEFT JOIN users u ON a.user_id = u.id
+  `;
+
+  // includeMissing === true -> emulate full outer join (attendance rows + users without attendance)
+  const rightSql = `
+    SELECT NULL AS attendance_id, u.id AS user_id, u.name AS user_name, NULL AS time_in, NULL AS time_out, NULL AS status, NULL AS late_minutes, NULL AS date
+    FROM users u
+    WHERE u.id NOT IN (SELECT DISTINCT user_id FROM attendance)
+  `;
+  const fullSql = `${leftSql} UNION ALL ${rightSql} ORDER BY date DESC, user_name`;
+  db.query(fullSql, (err, rows) => {
+    if (err) {
+      console.error('GET /attendance/full (full) query error:', err);
+      return res.status(500).json({ error: 'Database error', details: err.message });
+    }
+    res.json(rows);
   });
 });
 /**
@@ -684,7 +906,8 @@ app.post('/evaluation', async (req, res) => {
 // Get all evaluations
 app.get('/evaluation', async (req, res) => {
   try {
-    const [rows] = await db.promise().query(`
+    
+   const [rows] = await db.promise().query(`
       SELECT 
         e.*, 
         u.name AS teacher_name
@@ -765,6 +988,45 @@ app.post('/evaluation_question', async (req, res) => {
     );
     res.json({ id: result.insertId });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Check if student has already evaluated today
+app.get('/evaluation/check-student-today/:student_id', async (req, res) => {
+  const { student_id } = req.params;
+  
+  try {
+    // Check if student has any evaluation answers for today
+    const [rows] = await db.promise().query(`
+      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
+             e.teacher_id, u.name as teacher_name
+      FROM evaluation_answers ea
+      JOIN evaluation e ON ea.evaluation_id = e.id
+      LEFT JOIN users u ON e.teacher_id = u.id
+      WHERE ea.student_id = ? 
+      AND DATE(ea.created_at) = CURDATE()
+    `, [student_id]);
+    
+    if (rows.length > 0) {
+      return res.json({
+        hasEvaluated: true,
+        message: 'Student has already completed an evaluation today',
+        evaluations: rows.map(row => ({
+          evaluation_id: row.evaluation_id,
+          teacher_id: row.teacher_id,
+          teacher_name: row.teacher_name,
+          completed_at: row.created_at
+        }))
+      });
+    } else {
+      return res.json({
+        hasEvaluated: false,
+        message: 'Student can proceed with evaluation'
+      });
+    }
+  } catch (err) {
+    console.error('Error checking student evaluation status:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -890,45 +1152,6 @@ app.get('/evaluation_questions', async (req, res) => {
     const [rows] = await db.promise().query('SELECT id, question_text FROM evaluation_questions');
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Check if student has already evaluated today
-app.get('/evaluation/check-student-today/:student_id', async (req, res) => {
-  const { student_id } = req.params;
-  
-  try {
-    // Check if student has any evaluation answers for today
-    const [rows] = await db.promise().query(`
-      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
-             e.teacher_id, u.name as teacher_name
-      FROM evaluation_answers ea
-      JOIN evaluation e ON ea.evaluation_id = e.id
-      LEFT JOIN users u ON e.teacher_id = u.id
-      WHERE ea.student_id = ? 
-      AND DATE(ea.created_at) = CURDATE()
-    `, [student_id]);
-    
-    if (rows.length > 0) {
-      return res.json({
-        hasEvaluated: true,
-        message: 'Student has already completed an evaluation today',
-        evaluations: rows.map(row => ({
-          evaluation_id: row.evaluation_id,
-          teacher_id: row.teacher_id,
-          teacher_name: row.teacher_name,
-          completed_at: row.created_at
-        }))
-      });
-    } else {
-      return res.json({
-        hasEvaluated: false,
-        message: 'Student can proceed with evaluation'
-      });
-    }
-  } catch (err) {
-    console.error('Error checking student evaluation status:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2500,6 +2723,7 @@ app.delete('/users/:id', (req, res) => {
   });
 });
 
+
 app.get('/departments', (req, res) => {
   db.query('SELECT id, name, create_At, updated_At, updated_By FROM department', (err, results) => {
     if (err) {
@@ -2571,10 +2795,429 @@ app.delete('/departments/:id', (req, res) => {
   });
 });
 
+// --- Students CRUD API ---
 
+/**
+ * Get All Students
+ * GET /students
+ * Returns: List of all students with id, name, year, course
+ */
+app.get('/students', (req, res) => {
+  const sql = 'SELECT id, name, year, course FROM students ORDER BY name';
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    // Ensure IDs are strings to avoid numeric coercion
+    const formatted = results.map(row => ({
+      ...row,
+      id: row.id != null ? String(row.id) : null
+    }));
+    res.json(formatted);
+  });
+});
 
-// 404 handler
+/**
+ * Get Student by ID
+ * GET /students/:id
+ * Returns: Single student object
+ */
+app.get('/students/:id', (req, res) => {
+  const studentId = req.params.id;
+  const sql = 'SELECT id, name, year, course FROM students WHERE id = ?';
+  
+  db.query(sql, [studentId], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    
+    const student = results[0];
+    student.id = student.id != null ? String(student.id) : null;
+    res.json(student);
+  });
+});
+
+/**
+ * Create New Student
+ * POST /students
+ * Body: { name, year, course }
+ * Returns: Success message and student ID
+ */
+app.post('/students', (req, res) => {
+  const { name, year, course } = req.body;
+  
+  if (!name || !year || !course) {
+    return res.status(400).json({ error: 'Missing required fields: name, year, and course are required' });
+  }
+
+  // Helper to generate 8-char hex ID (consistent with users table)
+  const genId = () => crypto.randomBytes(4).toString('hex');
+  
+  const sql = 'INSERT INTO students (id, name, year, course) VALUES (?, ?, ?, ?)';
+
+  // Try inserting with generated IDs, retry on duplicate-ID collisions
+  const maxAttempts = 5;
+  let attempt = 0;
+
+  const tryInsert = () => {
+    attempt++;
+    const id = genId();
+    const values = [id, name, year, course];
+    
+    db.query(sql, values, (err, result) => {
+      if (err) {
+        // If duplicate entry on primary key, retry
+        if (err && err.code === 'ER_DUP_ENTRY' && attempt < maxAttempts) {
+          const msg = String(err.message || err.sqlMessage || '').toLowerCase();
+          if (msg.includes('primary') || (msg.includes('for key') && msg.includes('id'))) {
+            return tryInsert(); // Retry with new ID
+          }
+        }
+        return res.status(500).json({ error: 'Database insert error', details: err.message || err });
+      }
+      
+      res.status(201).json({ 
+        message: 'Student created successfully', 
+        studentId: id,
+        id: id 
+      });
+    });
+  };
+
+  tryInsert();
+});
+
+/**
+ * Update Student
+ * PUT /students/:id
+ * Body: { name, year, course }
+ * Returns: Success message
+ */
+app.put('/students/:id', (req, res) => {
+  const studentId = req.params.id;
+  const { name, year, course } = req.body;
+  
+  if (!name || !year || !course) {
+    return res.status(400).json({ error: 'Missing required fields: name, year, and course are required' });
+  }
+  
+  const sql = 'UPDATE students SET name = ?, year = ?, course = ? WHERE id = ?';
+  const values = [name, year, course, studentId];
+  
+  db.query(sql, values, (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database update error', details: err });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    res.json({ message: 'Student updated successfully' });
+  });
+});
+
+/**
+ * Delete Student
+ * DELETE /students/:id
+ * Returns: Success message
+ */
+app.delete('/students/:id', (req, res) => {
+  const studentId = req.params.id;
+  const sql = 'DELETE FROM students WHERE id = ?';
+  
+  db.query(sql, [studentId], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database delete error', details: err });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    res.json({ message: 'Student deleted successfully' });
+  });
+});
+
+/**
+ * Get Students by Year
+ * GET /students/year/:year
+ * Returns: List of students in specified year
+ */
+app.get('/students/year/:year', (req, res) => {
+  const year = req.params.year;
+  const sql = 'SELECT id, name, year, course FROM students WHERE year = ? ORDER BY name';
+  
+  db.query(sql, [year], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    
+    // Ensure IDs are strings
+    const formatted = results.map(row => ({
+      ...row,
+      id: row.id != null ? String(row.id) : null
+    }));
+    
+    res.json(formatted);
+  });
+});
+
+/**
+ * Get Students by Course
+ * GET /students/course/:course
+ * Returns: List of students in specified course
+ */
+app.get('/students/course/:course', (req, res) => {
+  const course = req.params.course;
+  const sql = 'SELECT id, name, year, course FROM students WHERE course = ? ORDER BY year, name';
+  
+  db.query(sql, [course], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    
+    // Ensure IDs are strings
+    const formatted = results.map(row => ({
+      ...row,
+      id: row.id != null ? String(row.id) : null
+    }));
+    
+    res.json(formatted);
+  });
+});
+
+// Create HTTP server and attach Socket.IO integration so /socket.io is served
+const server = http.createServer(app);
+// Middleware to log socket.io engine requests for debugging polling issues
 app.use((req, res, next) => {
+  try {
+    if (req.path && req.path.startsWith && req.path.startsWith('/socket.io')) {
+      console.log('SOCKET.IO REQUEST:', {
+        method: req.method,
+        path: req.path,
+        query: req.query,
+        headers: {
+          origin: req.headers.origin,
+          host: req.headers.host,
+          'user-agent': req.headers['user-agent'],
+          'x-requested-with': req.headers['x-requested-with']
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Socket log middleware error:', e && e.message);
+  }
+  next();
+});
+try {
+  // socket-integration is at repository root
+  const { attachSocket } = require('./socket-integration');
+  attachSocket({ app, server, db });
+  console.log('Socket.IO integration attached');
+} catch (err) {
+  console.warn('Could not attach Socket.IO integration:', err.message || err);
+}
+
+
+app.get('/attendance/merged', async (req, res) => {
+  const userServiceUrl = process.env.USER_SERVICE_URL;
+  try {
+    // First get attendance rows
+    const [attendanceRows] = await db.promise().query('SELECT id, user_id, time_in, time_out, status, late_minutes, date FROM attendance ORDER BY date DESC');
+
+    if (!attendanceRows || attendanceRows.length === 0) {
+      return res.json([]);
+    }
+
+    // If no external user service configured, join locally
+    if (!userServiceUrl) {
+      // Use existing pattern: LEFT JOIN users to include user_name
+      const sql = `
+        SELECT a.id, a.user_id, COALESCE(u.name, u.email, CONCAT(u.id, '')) AS user_name,
+               a.time_in, a.time_out, a.status, a.late_minutes, a.date
+        FROM attendance a
+        LEFT JOIN users u ON a.user_id = u.id
+        ORDER BY a.date DESC
+      `;
+      const [rows] = await db.promise().query(sql);
+      return res.json(rows);
+    }
+
+    // External user service path: try batch lookup first
+    // Build unique user id list
+    const userIds = Array.from(new Set(attendanceRows.map(r => r.user_id)));
+
+    // Attempt to call external service's batch endpoint: POST { ids: [...] } -> [{ id, name }] expected
+  // Use global fetch if available (Node 18+), otherwise lazy-load node-fetch (ESM) via dynamic import
+  const fetch = global.fetch || ((...args) => import('node-fetch').then(({ default: f }) => f(...args)));
+    let nameMap = {};
+    try {
+      const batchUrl = userServiceUrl.replace(/\/+$/, '') + '/users/batch-names';
+      const resp = await fetch(batchUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: userIds })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        // support either { id: name } map or [{ id, name }] array
+        if (Array.isArray(data)) {
+          data.forEach(u => { if (u && u.id !== undefined) nameMap[String(u.id)] = u.name || u.email || String(u.id); });
+        } else if (data && typeof data === 'object') {
+          // if object map
+          Object.keys(data).forEach(k => { nameMap[String(k)] = data[k]; });
+        }
+      } else {
+        console.error('User service batch lookup failed:', resp.status, await resp.text());
+      }
+    } catch (e) {
+      console.error('Error calling user service batch endpoint:', e && e.message ? e.message : e);
+    }
+
+    // If nameMap is empty, attempt per-user GET fallback (but keep it batched to avoid N+1 when possible)
+    if (Object.keys(nameMap).length === 0) {
+      try {
+        const userFetchPromises = userIds.map(id => {
+          const url = userServiceUrl.replace(/\/+$/, '') + `/users/${encodeURIComponent(id)}/name`;
+          return fetch(url).then(r => r.ok ? r.json().catch(() => null) : null).catch(() => null);
+        });
+        const results = await Promise.all(userFetchPromises);
+        results.forEach(r => {
+          if (r && (r.id !== undefined || r.name)) {
+            const id = r.id !== undefined ? r.id : r.user_id || r.userId;
+            nameMap[String(id)] = r.name || r.name || r.email || String(id);
+          }
+        });
+      } catch (e) {
+        console.error('Error during per-user fallback to user service:', e && e.message ? e.message : e);
+      }
+    }
+
+    // Finally, for any missing names, read from local users table in one query
+    const missingIds = userIds.filter(id => !nameMap[String(id)]);
+    if (missingIds.length > 0) {
+      try {
+        const placeholders = missingIds.map(() => '?').join(',');
+        const [localUsers] = await db.promise().query(
+          `SELECT id, COALESCE(name, email, CONCAT(id, '')) AS user_name FROM users WHERE id IN (${placeholders})`,
+          missingIds
+        );
+        localUsers.forEach(u => { nameMap[String(u.id)] = u.user_name; });
+      } catch (e) {
+        console.error('Error querying local users for missing names:', e && e.message ? e.message : e);
+      }
+    }
+
+    // Merge names into attendanceRows
+    const merged = attendanceRows.map(r => ({
+      ...r,
+      user_name: nameMap[String(r.user_id)] || String(r.user_id)
+    }));
+
+    return res.json(merged);
+  } catch (err) {
+    console.error('Error in /attendance/merged:', err && err.stack ? err.stack : err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+/**
+ * Get User Profile by ID
+ * GET /users/:id/profile
+ * Returns: User profile information (id, name, email, role, department)
+ */
+app.get('/users/:id/profile', (req, res) => {
+  const userId = req.params.id;
+  
+  const query = `
+    SELECT u.id, u.name, u.email, u.code, u.created_at,
+           r.name AS role_name,
+           d.name AS department_name
+    FROM users u
+    LEFT JOIN roles r ON u.role_id = r.id  
+    LEFT JOIN department d ON u.department_id = d.id
+    WHERE u.id = ?
+  `;
+  
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Ensure IDs are strings to avoid numeric coercion
+    const profile = results[0];
+    profile.id = profile.id != null ? String(profile.id) : null;
+    
+    res.json(profile);
+  });
+});
+
+/**
+ * Update User Password
+ * PUT /users/:id/password
+ * Body: { currentPassword, newPassword }
+ * Returns: Success message
+ */
+app.put('/users/:id/password', async (req, res) => {
+  const userId = req.params.id;
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+  
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+  }
+  
+  try {
+    // First, get the current password hash
+    db.query('SELECT password FROM users WHERE id = ?', [userId], async (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database query error', details: err });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Verify current password
+      const passwordMatch = await bcrypt.compare(currentPassword, results[0].password);
+      if (!passwordMatch) {
+        return res.status(400).json({ error: 'Current password is incorrect' });
+      }
+      
+      // Hash new password and update
+      const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+      const updated_at = new Date();
+      
+      db.query(
+        'UPDATE users SET password = ?, updated_at = ? WHERE id = ?',
+        [hashedNewPassword, updated_at, userId],
+        (updateErr, updateResult) => {
+          if (updateErr) {
+            return res.status(500).json({ error: 'Failed to update password', details: updateErr });
+          }
+          if (updateResult.affectedRows === 0) {
+            return res.status(404).json({ error: 'User not found' });
+          }
+          res.json({ message: 'Password updated successfully' });
+        }
+      );
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Password hashing failed', details: error });
+  }
+});
+
+// 404 handler (ignore Socket.IO engine paths so socket polling requests are not intercepted by Express)
+app.use((req, res, next) => {
+  if (req.path && req.path.startsWith && req.path.startsWith('/socket.io')) {
+    return next();
+  }
   res.status(404).json({ error: 'Not Found' });
 });
 
@@ -2583,17 +3226,6 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Internal Server Error' });
 });
-
-// Create HTTP server and attach Socket.IO integration so /socket.io is served
-const server = http.createServer(app);
-try {
-  // socket-integration is at repository root
-  const { attachSocket } = require('../socket-integration');
-  attachSocket({ app, server, db });
-  console.log('Socket.IO integration attached');
-} catch (err) {
-  console.warn('Could not attach Socket.IO integration:', err.message || err);
-}
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
