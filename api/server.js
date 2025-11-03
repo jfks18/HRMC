@@ -2843,51 +2843,38 @@ app.get('/students/:id', (req, res) => {
 /**
  * Create New Student
  * POST /students
- * Body: { name, year, course }
+ * Body: { id, name, year, course }
  * Returns: Success message and student ID
  */
 app.post('/students', (req, res) => {
-  const { name, year, course } = req.body;
+  const { id, name, year, course } = req.body;
   
-  if (!name || !year || !course) {
-    return res.status(400).json({ error: 'Missing required fields: name, year, and course are required' });
+  if (!id || !name || !year || !course) {
+    return res.status(400).json({ error: 'Missing required fields: id, name, year, and course are required' });
   }
 
-  // Helper to generate 8-char hex ID (consistent with users table)
-  const genId = () => crypto.randomBytes(4).toString('hex');
+  // Validate student ID format (you can customize this as needed)
+  if (id.length < 3 || id.length > 20) {
+    return res.status(400).json({ error: 'Student ID must be between 3 and 20 characters' });
+  }
   
   const sql = 'INSERT INTO students (id, name, year, course) VALUES (?, ?, ?, ?)';
-
-  // Try inserting with generated IDs, retry on duplicate-ID collisions
-  const maxAttempts = 5;
-  let attempt = 0;
-
-  const tryInsert = () => {
-    attempt++;
-    const id = genId();
-    const values = [id, name, year, course];
-    
-    db.query(sql, values, (err, result) => {
-      if (err) {
-        // If duplicate entry on primary key, retry
-        if (err && err.code === 'ER_DUP_ENTRY' && attempt < maxAttempts) {
-          const msg = String(err.message || err.sqlMessage || '').toLowerCase();
-          if (msg.includes('primary') || (msg.includes('for key') && msg.includes('id'))) {
-            return tryInsert(); // Retry with new ID
-          }
-        }
-        return res.status(500).json({ error: 'Database insert error', details: err.message || err });
+  const values = [id, name, year, course];
+  
+  db.query(sql, values, (err, result) => {
+    if (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ error: 'Student ID already exists. Please choose a different ID.' });
       }
-      
-      res.status(201).json({ 
-        message: 'Student created successfully', 
-        studentId: id,
-        id: id 
-      });
+      return res.status(500).json({ error: 'Database insert error', details: err.message || err });
+    }
+    
+    res.status(201).json({ 
+      message: 'Student created successfully', 
+      studentId: id,
+      id: id 
     });
-  };
-
-  tryInsert();
+  });
 });
 
 /**

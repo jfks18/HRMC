@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '../../apiFetch';
 
 interface Student {
@@ -10,18 +11,21 @@ interface Student {
 }
 
 interface NewStudent {
+  id: string;
   name: string;
   year: string;
   course: string;
 }
 
 export default function StudentsPage() {
+  const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [newStudent, setNewStudent] = useState<NewStudent>({
+    id: '',
     name: '',
     year: '',
     course: ''
@@ -72,8 +76,21 @@ export default function StudentsPage() {
     setError('');
     setSuccess('');
     
-    if (!newStudent.name.trim() || !newStudent.year || !newStudent.course) {
+    if (!newStudent.id.trim() || !newStudent.name.trim() || !newStudent.year || !newStudent.course) {
       setError('All fields are required');
+      return;
+    }
+
+    // Additional ID validation
+    const studentId = newStudent.id.trim();
+    if (studentId.length < 3 || studentId.length > 20) {
+      setError('Student ID must be between 3 and 20 characters');
+      return;
+    }
+
+    // Check for special characters that might cause issues
+    if (!/^[a-zA-Z0-9_-]+$/.test(studentId)) {
+      setError('Student ID can only contain letters, numbers, hyphens, and underscores');
       return;
     }
 
@@ -84,17 +101,25 @@ export default function StudentsPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newStudent),
+        body: JSON.stringify({
+          ...newStudent,
+          id: newStudent.id.trim(),
+          name: newStudent.name.trim()
+        }),
       });
 
       if (response.ok) {
         setSuccess('Student created successfully!');
-        setNewStudent({ name: '', year: '', course: '' });
+        setNewStudent({ id: '', name: '', year: '', course: '' });
         setShowCreateModal(false);
         fetchStudents();
       } else {
         const errorData = await response.json();
-        setError(errorData.error || 'Failed to create student');
+        if (response.status === 409) {
+          setError('Student ID already exists. Please choose a different ID.');
+        } else {
+          setError(errorData.error || 'Failed to create student');
+        }
       }
     } catch (err) {
       setError('Error creating student');
@@ -179,7 +204,7 @@ export default function StudentsPage() {
     setShowCreateModal(false);
     setShowEditModal(false);
     setEditingStudent(null);
-    setNewStudent({ name: '', year: '', course: '' });
+    setNewStudent({ id: '', name: '', year: '', course: '' });
     setError('');
     setSuccess('');
   };
@@ -196,6 +221,18 @@ export default function StudentsPage() {
 
   return (
     <div className="container-fluid p-4">
+      {/* Back Button */}
+      <div className="row mb-3">
+        <div className="col">
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => router.push('/admin/dashboard')}
+          >
+            <i className="bi bi-arrow-left me-2"></i>Back to Dashboard
+          </button>
+        </div>
+      </div>
+
       <div className="row mb-4">
         <div className="col">
           <h2 className="fw-bold text-primary mb-0">
@@ -365,8 +402,28 @@ export default function StudentsPage() {
                 </h5>
                 <button type="button" className="btn-close btn-close-white" onClick={closeModals}></button>
               </div>
+              <div className="alert alert-info m-3 mb-0" role="alert">
+                <i className="bi bi-info-circle me-2"></i>
+                <strong>Note:</strong> This Student ID will be used for faculty evaluation assignments. 
+                Make sure it matches the student's official ID number.
+              </div>
               <form onSubmit={handleCreateStudent}>
                 <div className="modal-body">
+                  <div className="mb-3">
+                    <label htmlFor="studentId" className="form-label">Student ID *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="studentId"
+                      value={newStudent.id}
+                      onChange={(e) => setNewStudent(prev => ({ ...prev, id: e.target.value }))}
+                      required
+                      placeholder="Enter unique student ID (e.g., 2024001, STU001)"
+                      minLength={3}
+                      maxLength={20}
+                    />
+                    <small className="text-muted">Must be unique and between 3-20 characters</small>
+                  </div>
                   <div className="mb-3">
                     <label htmlFor="studentName" className="form-label">Full Name *</label>
                     <input
