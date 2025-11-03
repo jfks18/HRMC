@@ -13,30 +13,55 @@ export default function EvaluationAuth() {
 			const [evaluationId, setEvaluationId] = useState("");
 		const [hasEvaluatedToday, setHasEvaluatedToday] = useState(false);
 		const [todayEvaluations, setTodayEvaluations] = useState<any[]>([]);
+		const [studentExists, setStudentExists] = useState<boolean | null>(null);
+		const [studentInfo, setStudentInfo] = useState<any>(null);
 
-		// Check if student has already evaluated today when they enter their student ID
+		// Check if student exists in database and evaluation status
 		const checkStudentEvaluationStatus = async (studentId: string) => {
 			if (!studentId.trim()) {
 				setHasEvaluatedToday(false);
 				setTodayEvaluations([]);
+				setStudentExists(null);
+				setStudentInfo(null);
 				return;
 			}
 			
 			try {
-				const checkResponse = await apiFetch(`/api/proxy/evaluation/check-student-today/${encodeURIComponent(studentId.trim())}`);
-				const checkData = await checkResponse.json();
+				// First check if student exists in database
+				const studentResponse = await apiFetch(`/api/proxy/students/${encodeURIComponent(studentId.trim())}`);
 				
-				if (checkData.hasEvaluated) {
-					setHasEvaluatedToday(true);
-					setTodayEvaluations(checkData.evaluations);
-				} else {
+				if (studentResponse.ok) {
+					const studentData = await studentResponse.json();
+					setStudentExists(true);
+					setStudentInfo(studentData);
+					
+					// Then check evaluation status
+					const checkResponse = await apiFetch(`/api/proxy/evaluation/check-student-today/${encodeURIComponent(studentId.trim())}`);
+					const checkData = await checkResponse.json();
+					
+					if (checkData.hasEvaluated) {
+						setHasEvaluatedToday(true);
+						setTodayEvaluations(checkData.evaluations);
+					} else {
+						setHasEvaluatedToday(false);
+						setTodayEvaluations([]);
+					}
+				} else if (studentResponse.status === 404) {
+					setStudentExists(false);
+					setStudentInfo(null);
 					setHasEvaluatedToday(false);
 					setTodayEvaluations([]);
+				} else {
+					console.error('Error checking student:', studentResponse.status);
+					setStudentExists(null);
+					setStudentInfo(null);
 				}
 			} catch (error) {
 				console.error('Error checking student status:', error);
 				setHasEvaluatedToday(false);
 				setTodayEvaluations([]);
+				setStudentExists(null);
+				setStudentInfo(null);
 			}
 		};
 
@@ -69,8 +94,19 @@ export default function EvaluationAuth() {
 					return;
 				}
 
+				// Check if student exists in database
+				if (studentExists === false) {
+					setError("Student ID not found in database. Please contact your administrator to add your student record first.");
+					return;
+				}
+
+				if (studentExists === null) {
+					setError("Please wait while we verify your student ID...");
+					return;
+				}
+
 				try {
-					// First check if student has already evaluated today
+					// Check if student has already evaluated today
 					const checkResponse = await apiFetch(`/api/proxy/evaluation/check-student-today/${encodeURIComponent(studentId.trim())}`);
 					const checkData = await checkResponse.json();
 					
@@ -121,13 +157,55 @@ export default function EvaluationAuth() {
 								width: "100%", 
 								padding: "1rem", 
 								borderRadius: "10px", 
-								border: hasEvaluatedToday ? "2px solid #ff9800" : "1px solid #b0bec5", 
-								marginBottom: hasEvaluatedToday ? 8 : 16, 
+								border: studentExists === false ? "2px solid #f44336" : 
+								       hasEvaluatedToday ? "2px solid #ff9800" : 
+								       studentExists === true ? "2px solid #4caf50" : "1px solid #b0bec5", 
+								marginBottom: 8, 
 								fontSize: "1.1rem", 
-								background: hasEvaluatedToday ? "#fff3e0" : "#f5f7fa" 
+								background: studentExists === false ? "#ffebee" : 
+								           hasEvaluatedToday ? "#fff3e0" : 
+								           studentExists === true ? "#e8f5e8" : "#f5f7fa" 
 							}}
 							required
 						/>
+						{studentExists === true && studentInfo && (
+							<div style={{ 
+								background: "#e8f5e8", 
+								border: "1px solid #4caf50", 
+								borderRadius: "8px", 
+								padding: "12px", 
+								marginBottom: 16,
+								fontSize: "0.9rem",
+								color: "#2e7d32"
+							}}>
+								<div style={{ fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+									✅ Student Found
+								</div>
+								<div style={{ fontSize: "0.85rem" }}>
+									<strong>Name:</strong> {studentInfo.name}<br/>
+									<strong>Year:</strong> {studentInfo.year}<br/>
+									<strong>Course:</strong> {studentInfo.course}
+								</div>
+							</div>
+						)}
+						{studentExists === false && (
+							<div style={{ 
+								background: "#ffebee", 
+								border: "1px solid #f44336", 
+								borderRadius: "8px", 
+								padding: "12px", 
+								marginBottom: 16,
+								fontSize: "0.9rem",
+								color: "#c62828"
+							}}>
+								<div style={{ fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+									❌ Student ID Not Found
+								</div>
+								<div style={{ fontSize: "0.85rem" }}>
+									This Student ID is not registered in the system. Please contact your administrator to add your student record.
+								</div>
+							</div>
+						)}
 						{hasEvaluatedToday && (
 							<div style={{ 
 								background: "#fff3e0", 
@@ -161,23 +239,25 @@ export default function EvaluationAuth() {
 						/>
 						<button 
 							type="submit" 
-							disabled={hasEvaluatedToday}
+							disabled={hasEvaluatedToday || studentExists === false}
 							style={{ 
 								width: "100%", 
 								padding: "1rem", 
 								borderRadius: "10px", 
-								background: hasEvaluatedToday ? "#bdbdbd" : "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)", 
+								background: (hasEvaluatedToday || studentExists === false) ? "#bdbdbd" : "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)", 
 								color: "white", 
 								fontWeight: 700, 
 								fontSize: "1.15rem", 
 								border: "none", 
 								boxShadow: "0 2px 8px rgba(44,62,80,0.08)", 
-								cursor: hasEvaluatedToday ? "not-allowed" : "pointer", 
+								cursor: (hasEvaluatedToday || studentExists === false) ? "not-allowed" : "pointer", 
 								letterSpacing: 0.5,
-								opacity: hasEvaluatedToday ? 0.6 : 1
+								opacity: (hasEvaluatedToday || studentExists === false) ? 0.6 : 1
 							}}
 						>
-							{hasEvaluatedToday ? "Already Evaluated Today" : "Login"}
+							{hasEvaluatedToday ? "Already Evaluated Today" : 
+							 studentExists === false ? "Student Not Found" : 
+							 "Login"}
 						</button>
 						{error && <div style={{ color: "#e53935", marginTop: 16, fontWeight: 600 }}>{error}</div>}
 					</form>
