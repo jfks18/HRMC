@@ -93,6 +93,18 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 		}
 	};
 
+	// Function to completely reset the form to initial state
+	const resetFormToInitialState = () => {
+		// Reset all form states to initial values
+		setResponses([]); // This will be re-initialized by the useEffect
+		setLockedQuestions(new Set()); // Clear all locks
+		setError("");
+		setIncomplete([]);
+		setCurrentSectionIndex(0);
+		setSubmitted(false);
+		setLoading(false);
+	};
+
 		const handleSubmit = async (e: React.FormEvent) => {
 			e.preventDefault();
 			// Validate answers and collect incomplete question indexes
@@ -141,17 +153,14 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 				setSubmitted(true);
 				
 				// Start countdown and redirect
-				setRedirectCountdown(3);
+				setRedirectCountdown(5);
 				const countdownInterval = setInterval(() => {
 					setRedirectCountdown(prev => {
 						if (prev === null || prev <= 1) {
 							clearInterval(countdownInterval);
-							// Clear all states and redirect back to evaluation start (auth screen)
-							setResponses([]);
-							setLockedQuestions(new Set());
-							setError("");
-							setIncomplete([]);
-							setCurrentSectionIndex(0);
+							// Reset the entire form to initial locked state
+							resetFormToInitialState();
+							// Redirect back to evaluation auth screen
 							router.replace('/evaluation');
 							return null;
 						}
@@ -414,17 +423,25 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 						marginTop: 18, 
 						fontWeight: 700, 
 						fontSize: "1.08rem",
-						padding: "16px",
+						padding: "20px",
 						background: "#e8f5e8",
-						borderRadius: "8px",
+						borderRadius: "12px",
 						border: "2px solid #2e7d32",
 						textAlign: "center"
 					}}>
-						<div style={{ marginBottom: 8 }}>✅ Thank you for your evaluation!</div>
+						<div style={{ marginBottom: 12, fontSize: "1.2rem" }}>✅ Evaluation Completed Successfully!</div>
+						<div style={{ marginBottom: 8, fontSize: "1rem", color: "#2e7d32" }}>
+							Thank you for your feedback. Your responses have been saved.
+						</div>
 						{redirectCountdown !== null && (
-							<div style={{ fontSize: "0.9rem", color: "#1b5e20" }}>
-								Redirecting to login page in {redirectCountdown} seconds...
-							</div>
+							<>
+								<div style={{ fontSize: "0.9rem", color: "#1b5e20", marginBottom: 8 }}>
+									🔒 Form is being reset and locked...
+								</div>
+								<div style={{ fontSize: "0.9rem", color: "#1b5e20" }}>
+									Returning to login page in {redirectCountdown} seconds...
+								</div>
+							</>
 						)}
 					</div>
 				)}
