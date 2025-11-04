@@ -7,12 +7,13 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     
     // Check if backend URL is configured
-    if (!process.env.BACKEND_URL && process.env.NODE_ENV === 'production') {
-      return NextResponse.json(
-        { error: 'Backend service not configured. Please contact administrator.' },
-        { status: 503 }
-      );
-    }
+    // Temporarily disabled for testing
+    // if (!process.env.BACKEND_URL && process.env.NODE_ENV === 'production') {
+    //   return NextResponse.json(
+    //     { error: 'Backend service not configured. Please contact administrator.' },
+    //     { status: 503 }
+    //   );
+    // }
     
     // Create AbortController for timeout (increased for Render)
     const controller = new AbortController();
