@@ -7,14 +7,14 @@ type Message = { id?: number | null; room: string; sender_id?: string | null; se
 
 // Resolve socket server URL:
 // - Prefer NEXT_PUBLIC_SOCKET_URL when provided
-// - Otherwise hardcode the ngrok URL you requested so the client always connects there in dev
+// - Otherwise use localhost for local development
 const SOCKET_URL = (() => {
-  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_SOCKET_URL || 'https://buck-leading-pipefish.ngrok-free.app';
+  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
   if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL;
   // runtime override via devtools: window.__NGROK_URL
   // @ts-ignore
   if (typeof window.__NGROK_URL === 'string' && window.__NGROK_URL) return window.__NGROK_URL;
-  return 'https://buck-leading-pipefish.ngrok-free.app';
+  return 'http://localhost:5000';
 })();
 
 export default function ChatWidget() {
@@ -42,7 +42,7 @@ export default function ChatWidget() {
   function getToken() {
     try {
       if (typeof window === 'undefined') return null;
-      return localStorage.getItem('token') || null;
+      return localStorage.getItem('authToken') || localStorage.getItem('token') || null;
     } catch (e) { return null; }
   }
 
@@ -51,24 +51,31 @@ export default function ChatWidget() {
     attemptedWebsocket.current = true;
     // connect socket.io client
     const token = getToken();
-    // include the ngrok skip header in transportOptions where supported (polling)
-    // Add the query param so browsers send it as part of the URL (browsers can't reliably set custom headers on WS handshakes)
-    // ngrok recognizes the `ngrok-skip-browser-warning` query parameter as well.
-    const skipParam = 'ngrok-skip-browser-warning=true';
-    const connectUrl = SOCKET_URL ? (SOCKET_URL + (SOCKET_URL.includes('?') ? '&' : '?') + skipParam) : undefined;
+    // Use Socket.IO URL directly for localhost development (no ngrok parameters needed)
+    const connectUrl = SOCKET_URL;
 
   console.log('ChatWidget connecting. SOCKET_URL=', SOCKET_URL, ' connectUrl=', connectUrl);
-    // Force websocket-only transport to avoid polling/handshake issues through proxies/ngrok
+    console.log('Token for connection:', token ? 'present' : 'missing');
+    // Use both websocket and polling for localhost development
     const client = io(connectUrl || undefined, {
       auth: { token },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      forceNew: true,
+      reconnection: true
     });
     setSocket(client);
 
-    client.on('connect', () => { setConnected(true); console.log('socket connected, id=', client.id); });
-    client.on('disconnect', () => { setConnected(false); });
+    client.on('connect', () => { 
+      setConnected(true); 
+      console.log('✅ Socket connected successfully, id=', client.id); 
+    });
+    client.on('disconnect', (reason) => { 
+      setConnected(false); 
+      console.log('❌ Socket disconnected, reason:', reason); 
+    });
     client.on('connect_error', (err: any) => {
-      console.error('socket connect_error', err);
+      console.error('❌ Socket connection error:', err.message || err);
+      console.error('Full error details:', err);
     });
     client.on('error', (err: any) => { console.error('socket error', err); });
 

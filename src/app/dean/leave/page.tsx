@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import TopBar from '../../components/TopBar';
 import SideNav from '../components/SideNav';
 import LeaveTable from './leavetable';
+import LeaveCreditCard from '../../components/LeaveCreditCard';
 import GlobalModal, { GlobalModalField } from '../../components/GlobalModal';
 
 export default function LeavePage() {
@@ -54,6 +55,20 @@ export default function LeavePage() {
       const timeDifference = endDate.getTime() - startDate.getTime();
       const daysDifference = Math.ceil(timeDifference / (1000 * 3600 * 24)) + 1;
 
+      const { apiFetch } = await import('../../apiFetch');
+      
+      // Validate leave balance before submission
+      const balanceResponse = await apiFetch(`/api/proxy/leave_balance/${userId}`);
+      
+      if (balanceResponse.ok) {
+        const balanceData = await balanceResponse.json();
+        const leaveType = balanceData.leave_balance?.find((lb: any) => lb.type === formData.type);
+        
+        if (leaveType && leaveType.remaining_days < daysDifference) {
+          throw new Error(`Insufficient ${formData.type} leave balance. You have ${leaveType.remaining_days} days remaining, but requested ${daysDifference} days.`);
+        }
+      }
+
       const leaveData = {
         user_id: userId,
         type: formData.type,
@@ -65,7 +80,6 @@ export default function LeavePage() {
 
       console.log('Submitting leave request:', leaveData);
 
-      const { apiFetch } = await import('../../apiFetch');
       const response = await apiFetch('/api/proxy/leave_request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(leaveData) });
 
       if (!response.ok) {
@@ -169,6 +183,12 @@ export default function LeavePage() {
               <i className="bi bi-plus-circle me-2"></i>
               Leave Application
             </button>
+          </div>
+          
+          <div className="row mb-4">
+            <div className="col-md-4">
+              <LeaveCreditCard />
+            </div>
           </div>
           
           <LeaveTable />

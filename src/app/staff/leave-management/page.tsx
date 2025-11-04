@@ -3,6 +3,7 @@ import React from 'react';
 import TopBar from '../../components/TopBar';
 import SideNav from '../components/SideNav';
 import LeaveTable from './leavetable';
+import LeaveCreditCard from '../../components/LeaveCreditCard';
 
 export default function StaffLeaveManagementPage() {
   return (
@@ -13,6 +14,13 @@ export default function StaffLeaveManagementPage() {
         <main className="container-fluid py-4">
           <h1 className="fw-bold mb-1" style={{ color: '#1a237e' }}>Leave Management</h1>
           <div className="text-muted mb-4">View and manage your leave requests</div>
+          
+          <div className="row mb-4">
+            <div className="col-md-4">
+              <LeaveCreditCard />
+            </div>
+          </div>
+          
           {/* Add leave search/filter and table here */}
           <LeaveTable/>
         </main>

@@ -143,21 +143,10 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 				await Promise.all(submitPromises);
 				setSubmitted(true);
 				
-				// Start countdown and redirect
-				setRedirectCountdown(5);
-				const countdownInterval = setInterval(() => {
-					setRedirectCountdown(prev => {
-						if (prev === null || prev <= 1) {
-							clearInterval(countdownInterval);
-							// Reset the entire form to initial locked state
-							resetFormToInitialState();
-							// Redirect back to evaluation auth screen
-							router.replace('/evaluation');
-							return null;
-						}
-						return prev - 1;
-					});
-				}, 1000);
+				// Reset the entire form to initial locked state
+				resetFormToInitialState();
+				// Redirect immediately to thank-you page
+				router.replace('/evaluation/thank-you');
 			} catch (err) {
 				const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
 				setError(`Failed to submit evaluation: ${errorMessage}`);
@@ -390,16 +379,9 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 						<div style={{ marginBottom: 8, fontSize: "1rem", color: "#2e7d32" }}>
 							Thank you for your feedback. Your responses have been saved.
 						</div>
-						{redirectCountdown !== null && (
-							<>
-								<div style={{ fontSize: "0.9rem", color: "#1b5e20", marginBottom: 8 }}>
-									🔒 Form is being reset and locked...
-								</div>
-								<div style={{ fontSize: "0.9rem", color: "#1b5e20" }}>
-									Returning to login page in {redirectCountdown} seconds...
-								</div>
-							</>
-						)}
+						<div style={{ fontSize: "0.9rem", color: "#1b5e20", marginBottom: 8 }}>
+							Redirecting to thank you page...
+						</div>
 					</div>
 				)}
 			</form>

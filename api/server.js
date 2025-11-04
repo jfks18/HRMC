@@ -611,6 +611,123 @@ app.delete('/leave_request/:id', (req, res) => {
 });
 
 /**
+ * Get All Leave Credits
+ * GET /leave_cred
+ * Returns: List of all leave credit types with their allocations
+ */
+app.get('/leave_cred', (req, res) => {
+  const sql = 'SELECT `id`, `type`, `credits` FROM `leave_cred` WHERE 1';
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    res.json(results);
+  });
+});
+
+/**
+ * Get Leave Balance for User
+ * GET /leave_balance/:user_id
+ * Returns: Leave credits and used days for each leave type for the specified user
+ */
+app.get('/leave_balance/:user_id', (req, res) => {
+  const user_id = req.params.user_id;
+  const year = req.query.year || new Date().getFullYear();
+  
+  // Get all leave credit types
+  const creditsQuery = 'SELECT `id`, `type`, `credits` FROM `leave_cred` WHERE 1';
+  
+  db.query(creditsQuery, (err, credits) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    
+    // Get used leave days for the specified user and year (only approved requests)
+    const usedQuery = `
+      SELECT 
+        type,
+        SUM(DATEDIFF(end_date, start_date) + 1) as used_days
+      FROM leave_request 
+      WHERE user_id = ? 
+        AND is_approve = 1 
+        AND YEAR(start_date) = ?
+      GROUP BY type
+    `;
+    
+    db.query(usedQuery, [user_id, year], (err, usedResults) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database query error', details: err });
+      }
+      
+      // Create a map of used days by leave type
+      const usedMap = {};
+      usedResults.forEach(row => {
+        usedMap[row.type] = parseInt(row.used_days) || 0;
+      });
+      
+      // Calculate remaining leave for each type
+      const leaveBalance = credits.map(credit => {
+        const usedDays = usedMap[credit.type] || 0;
+        const remainingDays = credit.credits - usedDays;
+        
+        return {
+          id: credit.id,
+          type: credit.type,
+          total_credits: credit.credits,
+          used_days: usedDays,
+          remaining_days: Math.max(0, remainingDays), // Ensure non-negative
+          year: parseInt(year)
+        };
+      });
+      
+      res.json({
+        user_id: parseInt(user_id),
+        year: parseInt(year),
+        leave_balance: leaveBalance
+      });
+    });
+  });
+});
+
+/**
+ * Get Leave Summary for All Users
+ * GET /leave_summary
+ * Returns: Leave balance summary for all users
+ */
+app.get('/leave_summary', (req, res) => {
+  const year = req.query.year || new Date().getFullYear();
+  
+  const summaryQuery = `
+    SELECT 
+      u.id as user_id,
+      u.name as user_name,
+      lc.type as leave_type,
+      lc.credits as total_credits,
+      COALESCE(SUM(DATEDIFF(lr.end_date, lr.start_date) + 1), 0) as used_days,
+      (lc.credits - COALESCE(SUM(DATEDIFF(lr.end_date, lr.start_date) + 1), 0)) as remaining_days
+    FROM users u
+    CROSS JOIN leave_cred lc
+    LEFT JOIN leave_request lr ON u.id = lr.user_id 
+      AND lr.type = lc.type 
+      AND lr.is_approve = 1 
+      AND YEAR(lr.start_date) = ?
+    GROUP BY u.id, u.name, lc.type, lc.credits
+    ORDER BY u.name, lc.type
+  `;
+  
+  db.query(summaryQuery, [year], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    
+    res.json({
+      year: parseInt(year),
+      summary: results
+    });
+  });
+});
+
+/**
  * Approve/Disapprove Leave Request
  * PATCH /leave_request/:id/approve
  * Body: { is_approve }
@@ -3170,8 +3287,8 @@ app.use((req, res, next) => {
   next();
 });
 try {
-  // socket-integration is at repository root
-  const { attachSocket } = require('./socket-integration');
+  // socket-integration is at repository root, one level up from api directory
+  const { attachSocket } = require('../socket-integration');
   attachSocket({ app, server, db });
   console.log('Socket.IO integration attached');
 } catch (err) {

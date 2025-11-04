@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND = process.env.BACKEND_URL || 'https://buck-leading-pipefish.ngrok-free.app';
+const BACKEND = process.env.BACKEND_URL || 'http://localhost:5000';
 
 function filterResponseHeaders(headers: Headers) {
   const out: Record<string, string> = {};
