@@ -21,12 +21,13 @@ async function handle(request: Request, ctx: any) {
     const url = `${BACKEND}/${path}`;
 
     // Check if backend is configured in production
-    if (!process.env.BACKEND_URL && process.env.NODE_ENV === 'production') {
-      return NextResponse.json(
-        { error: 'Backend service not configured' },
-        { status: 503 }
-      );
-    }
+    // Temporarily disabled - using fallback URL
+    // if (!process.env.BACKEND_URL && process.env.NODE_ENV === 'production') {
+    //   return NextResponse.json(
+    //     { error: 'Backend service not configured' },
+    //     { status: 503 }
+    //   );
+    // }
 
     // Create AbortController for timeout
     const controller = new AbortController();
