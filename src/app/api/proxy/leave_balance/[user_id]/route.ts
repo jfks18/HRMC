@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
 
-export async function GET(request: NextRequest, { params }: { params: { user_id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ user_id: string }> }) {
   const { searchParams } = new URL(request.url);
   const year = searchParams.get('year') || new Date().getFullYear().toString();
+  const { user_id } = await params;
   
-  const backendUrl = `${BACKEND_URL}/leave_balance/${params.user_id}?year=${year}`;
+  const backendUrl = `${BACKEND_URL}/leave_balance/${user_id}?year=${year}`;
 
   try {
     const response = await fetch(backendUrl, {
