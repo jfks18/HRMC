@@ -14,21 +14,46 @@ function filterResponseHeaders(headers: Headers) {
 }
 
 async function handle(request: Request, ctx: any) {
-  // Next.js requires awaiting the route context before using params in dynamic API routes
-  const { params } = await ctx;
-  const path = params?.path?.join('/') || '';
-  const url = `${BACKEND}/${path}`;
+  try {
+    // Next.js requires awaiting the route context before using params in dynamic API routes
+    const { params } = await ctx;
+    const path = params?.path?.join('/') || '';
+    const url = `${BACKEND}/${path}`;
 
-  const init: RequestInit = {
-    method: request.method,
-    headers: Object.fromEntries(request.headers),
-    body: ['GET','HEAD'].includes(request.method) ? undefined : await request.arrayBuffer()
-  };
+    // Check if backend is configured in production
+    if (!process.env.BACKEND_URL && process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { error: 'Backend service not configured' },
+        { status: 503 }
+      );
+    }
 
-  const res = await fetch(url, init);
-  const body = await res.arrayBuffer();
-  const headers = filterResponseHeaders(res.headers);
-  return new NextResponse(Buffer.from(body), { status: res.status, headers });
+    const init: RequestInit = {
+      method: request.method,
+      headers: Object.fromEntries(request.headers),
+      body: ['GET','HEAD'].includes(request.method) ? undefined : await request.arrayBuffer()
+    };
+
+    const res = await fetch(url, init);
+    const body = await res.arrayBuffer();
+    const headers = filterResponseHeaders(res.headers);
+    return new NextResponse(Buffer.from(body), { status: res.status, headers });
+    
+  } catch (error: any) {
+    console.error('Proxy API error:', error);
+    
+    if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
+      return NextResponse.json(
+        { error: 'Backend service unavailable', details: 'Connection refused' },
+        { status: 503 }
+      );
+    }
+    
+    return NextResponse.json(
+      { error: 'Proxy request failed', details: error.message },
+      { status: 500 }
+    );
+  }
 }
 
 export async function GET(request: Request, ctx: any) { return handle(request, ctx); }

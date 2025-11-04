@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../apiFetch';
+import ServiceUnavailable from './ServiceUnavailable';
 
 interface LeaveBalance {
   id: number;
@@ -47,7 +48,13 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to fetch leave credits: ${response.status}`);
+        
+        // Handle specific error cases
+        if (response.status === 503) {
+          throw new Error('Service temporarily unavailable. Please try again later.');
+        }
+        
+        throw new Error(errorData.error || errorData.message || `Failed to fetch leave credits: ${response.status}`);
       }
 
       const data = await response.json();
@@ -86,6 +93,17 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
   }
 
   if (error) {
+    // Check if it's a service unavailable error
+    if (error.includes('temporarily unavailable') || error.includes('Service temporarily unavailable')) {
+      return (
+        <ServiceUnavailable 
+          serviceName="Leave Credits"
+          className={className}
+          onRetry={() => fetchLeaveCreditData(currentYear)}
+        />
+      );
+    }
+    
     return (
       <div className={`card shadow-sm ${className}`}>
         <div className="card-body">

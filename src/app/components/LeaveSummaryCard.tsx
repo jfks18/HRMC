@@ -36,7 +36,13 @@ const LeaveSummaryCard: React.FC<LeaveSummaryCardProps> = ({ className = "" }) =
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to fetch leave summary: ${response.status}`);
+        
+        // Handle specific error cases
+        if (response.status === 503) {
+          throw new Error('Service temporarily unavailable. Please try again later.');
+        }
+        
+        throw new Error(errorData.error || errorData.message || `Failed to fetch leave summary: ${response.status}`);
       }
 
       const data = await response.json();
