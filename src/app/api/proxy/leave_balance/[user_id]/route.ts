@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://buck-leading-pipefish.ngrok-free.app';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ user_id: string }> }) {
   const { searchParams } = new URL(request.url);

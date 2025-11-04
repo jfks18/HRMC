@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND = process.env.BACKEND_URL || 'http://localhost:5000';
+const BACKEND = process.env.BACKEND_URL || 'https://buck-leading-pipefish.ngrok-free.app';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
