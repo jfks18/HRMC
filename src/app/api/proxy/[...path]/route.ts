@@ -28,13 +28,19 @@ async function handle(request: Request, ctx: any) {
       );
     }
 
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
     const init: RequestInit = {
       method: request.method,
       headers: Object.fromEntries(request.headers),
-      body: ['GET','HEAD'].includes(request.method) ? undefined : await request.arrayBuffer()
+      body: ['GET','HEAD'].includes(request.method) ? undefined : await request.arrayBuffer(),
+      signal: controller.signal
     };
 
     const res = await fetch(url, init);
+    clearTimeout(timeoutId);
     const body = await res.arrayBuffer();
     const headers = filterResponseHeaders(res.headers);
     return new NextResponse(Buffer.from(body), { status: res.status, headers });
@@ -42,9 +48,32 @@ async function handle(request: Request, ctx: any) {
   } catch (error: any) {
     console.error('Proxy API error:', error);
     
+    // Handle timeout errors
+    if (error.name === 'AbortError') {
+      return NextResponse.json(
+        { error: 'Backend service timeout', details: 'Request timed out after 5 seconds' },
+        { status: 504 }
+      );
+    }
+    
+    // Handle connection errors
     if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
       return NextResponse.json(
         { error: 'Backend service unavailable', details: 'Connection refused' },
+        { status: 503 }
+      );
+    }
+    
+    if (error.code === 'UND_ERR_CONNECT_TIMEOUT' || error.cause?.code === 'UND_ERR_CONNECT_TIMEOUT') {
+      return NextResponse.json(
+        { error: 'Backend service timeout', details: 'Connection timeout' },
+        { status: 504 }
+      );
+    }
+    
+    if (error.message?.includes('fetch failed') || error.message?.includes('Connect Timeout')) {
+      return NextResponse.json(
+        { error: 'Backend service unreachable', details: 'Unable to connect to backend server' },
         { status: 503 }
       );
     }
