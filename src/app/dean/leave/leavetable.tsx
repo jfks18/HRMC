@@ -166,29 +166,12 @@ export default function LeaveTable() {
             userId: userId
           });
           
-          // If user not found, fall back to showing all leave requests
+          // If user not found, show empty list (dean must exist in database)
           if (userResponse.status === 404) {
-            console.warn(`User ${userId} not found in database, showing all leave requests`);
-            setDepartmentName('All Departments (User not found)');
-            
-            // Fetch all leave requests as fallback
-            const response = await apiFetch('/api/proxy/leave_request', { 
-              headers: { 'Content-Type': 'application/json' } 
-            });
-            
-            if (!response.ok) {
-              if (response.status === 404) {
-                setLeaveRequests([]);
-                setError('No leave requests found');
-                return;
-              }
-              throw new Error(`HTTP ${response.status}: Failed to fetch leave requests`);
-            }
-            
-            const data = await response.json();
-            console.log('Fetched all leave requests (fallback):', data);
-            setLeaveRequests(data);
-            setError('');
+            console.warn(`Dean user ${userId} not found in database`);
+            setDepartmentName('User Not Found');
+            setLeaveRequests([]);
+            setError('Dean user not found in database. Please contact administration.');
             return;
           }
           
@@ -202,26 +185,10 @@ export default function LeaveTable() {
         setDepartmentName(userData.department_name || 'All Departments');
         
         if (!userData.department_id) {
-          // Fallback to all leave requests if no department assigned
-          console.log('Dean has no department assigned, fetching all leave requests');
-          
-          const response = await apiFetch('/api/proxy/leave_request', { 
-            headers: { 'Content-Type': 'application/json' } 
-          });
-          
-          if (!response.ok) {
-            if (response.status === 404) {
-              setLeaveRequests([]);
-              setError('No leave requests found');
-              return;
-            }
-            throw new Error(`HTTP ${response.status}: Failed to fetch leave requests`);
-          }
-          
-          const data = await response.json();
-          console.log('Fetched all leave requests (no department filter):', data);
-          setLeaveRequests(data);
-          setError('');
+          // If dean has no department assigned, show empty list
+          console.log('Dean has no department assigned, showing empty leave requests');
+          setLeaveRequests([]);
+          setError('You are not assigned to any department. No leave requests to display.');
           return;
         }
         
@@ -233,18 +200,21 @@ export default function LeaveTable() {
         });
         
         if (!response.ok) {
-          if (response.status === 404) {
-            setLeaveRequests([]);
-            setError(`No leave requests found in your department`);
-            return;
-          }
           throw new Error(`HTTP ${response.status}: Failed to fetch department leave requests`);
         }
         
         const data = await response.json();
         console.log(`Fetched ${data.length} leave requests for department ${userData.department_id}:`, data);
-        setLeaveRequests(data);
-        setError('');
+        
+        // Handle empty results gracefully
+        if (!Array.isArray(data) || data.length === 0) {
+          console.log(`No leave requests found for department ${userData.department_id}`);
+          setLeaveRequests([]);
+          setError(''); // No error, just empty department
+        } else {
+          setLeaveRequests(data);
+          setError('');
+        }
         
       } catch (err: any) {
         console.error('Error fetching leave requests:', err);
@@ -620,7 +590,12 @@ export default function LeaveTable() {
         {filteredRequests.length === 0 ? (
           <div className="text-center py-4">
             <i className="bi bi-calendar-x fs-1 text-muted"></i>
-            <p className="text-muted mt-2">No leave requests found</p>
+            <p className="text-muted mt-2">
+              {leaveRequests.length === 0 && !error ? 
+                `No leave requests found in ${departmentName || 'your department'}` : 
+                'No leave requests match your search criteria'
+              }
+            </p>
           </div>
         ) : (
           <Table columns={columns} data={filteredRequests} />

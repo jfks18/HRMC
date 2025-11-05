@@ -640,10 +640,8 @@ app.get('/leave_request/department/:department_id', (req, res) => {
     }
     
     if (results.length === 0) {
-      return res.status(404).json({ 
-        error: 'No leave requests found for this department',
-        department_id: department_id 
-      });
+      console.log(`No leave requests found for department ${department_id}`);
+      return res.json([]); // Return empty array instead of 404
     }
     
     // Log department details for debugging
