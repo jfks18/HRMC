@@ -83,6 +83,7 @@ export default function LeaveTable() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
   const [processingIds, setProcessingIds] = useState<number[]>([]);
+  const [departmentName, setDepartmentName] = useState<string>('');
 
   const getRealStatus = (is_approve: number | null | undefined): string => {
     if (is_approve === null || typeof is_approve === 'undefined') return 'pending';
@@ -104,7 +105,7 @@ export default function LeaveTable() {
     return Array.from(set).sort();
   }, [leaveRequests]);
 
-  // Get current user ID from localStorage
+  // Get current user ID and department from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const userId = localStorage.getItem('userId');
@@ -113,29 +114,80 @@ export default function LeaveTable() {
     }
   }, []);
 
-  // Fetch all leave requests for dean view
+  // Fetch leave requests filtered by dean's department
   useEffect(() => {
     const fetchLeaveRequests = async () => {
       setLoading(true);
       setError('');
       
       try {
-        console.log('Fetching all leave requests for dean view');
+        // First get the current dean's department information
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          throw new Error('User ID not found. Please log in again.');
+        }
+        
+        console.log('Fetching dean user info to get department ID');
         
         const { apiFetch } = await import('../../apiFetch');
-        const response = await apiFetch('/api/proxy/leave_request', { headers: { 'Content-Type': 'application/json' } });
+        
+        // Get dean's user information including department_id
+        const userResponse = await apiFetch(`/api/proxy/users/${userId}`, { 
+          headers: { 'Content-Type': 'application/json' } 
+        });
+        
+        if (!userResponse.ok) {
+          throw new Error(`Failed to fetch user information: HTTP ${userResponse.status}`);
+        }
+        
+        const userData = await userResponse.json();
+        console.log('Dean user data:', userData);
+        
+        // Set department name for display
+        setDepartmentName(userData.department_name || 'All Departments');
+        
+        if (!userData.department_id) {
+          // Fallback to all leave requests if no department assigned
+          console.log('Dean has no department assigned, fetching all leave requests');
+          
+          const response = await apiFetch('/api/proxy/leave_request', { 
+            headers: { 'Content-Type': 'application/json' } 
+          });
+          
+          if (!response.ok) {
+            if (response.status === 404) {
+              setLeaveRequests([]);
+              setError('No leave requests found');
+              return;
+            }
+            throw new Error(`HTTP ${response.status}: Failed to fetch leave requests`);
+          }
+          
+          const data = await response.json();
+          console.log('Fetched all leave requests (no department filter):', data);
+          setLeaveRequests(data);
+          setError('');
+          return;
+        }
+        
+        // Fetch leave requests for dean's department only
+        console.log(`Fetching leave requests for department: ${userData.department_id}`);
+        
+        const response = await apiFetch(`/api/proxy/leave_request/department/${userData.department_id}`, { 
+          headers: { 'Content-Type': 'application/json' } 
+        });
         
         if (!response.ok) {
           if (response.status === 404) {
             setLeaveRequests([]);
-            setError('No leave requests found');
+            setError(`No leave requests found in your department`);
             return;
           }
-          throw new Error(`HTTP ${response.status}: Failed to fetch leave requests`);
+          throw new Error(`HTTP ${response.status}: Failed to fetch department leave requests`);
         }
         
         const data = await response.json();
-        console.log('Fetched leave requests:', data);
+        console.log(`Fetched ${data.length} leave requests for department ${userData.department_id}:`, data);
         setLeaveRequests(data);
         setError('');
         
@@ -488,7 +540,12 @@ export default function LeaveTable() {
     <div className="card">
       <div className="card-body">
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className="card-title mb-0">All Leave Requests</h5>
+          <div>
+            <h5 className="card-title mb-0">Department Leave Requests</h5>
+            {departmentName && (
+              <small className="text-muted">Showing requests from: {departmentName}</small>
+            )}
+          </div>
           <span className="badge bg-primary">{filteredRequests.length} requests</span>
         </div>
         

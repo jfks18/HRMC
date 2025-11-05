@@ -336,7 +336,51 @@ app.get('/users/:id/name', (req, res) => {
   });
 });
 
-
+/**
+ * Get User by ID
+ * GET /users/:id
+ * Returns: User object with all details including department_id
+ */
+app.get('/users/:id', (req, res) => {
+  const userId = req.params.id;
+  
+  const sql = `
+    SELECT 
+      u.id,
+      u.name,
+      u.email,
+      u.code,
+      u.department_id,
+      u.role_id,
+      COALESCE(r.name, 'No Role') AS roleName,
+      COALESCE(d.name, 'No Department') AS department_name
+    FROM users u
+    LEFT JOIN roles r ON TRIM(CAST(u.role_id AS CHAR)) = TRIM(CAST(r.id AS CHAR))
+    LEFT JOIN department d ON TRIM(CAST(u.department_id AS CHAR)) = TRIM(CAST(d.id AS CHAR))
+    WHERE u.id = ?
+  `;
+  
+  db.query(sql, [userId], (err, results) => {
+    if (err) {
+      console.error('Database error in GET /users/:id:', err);
+      return res.status(500).json({ error: 'Database query error', details: err.message });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Ensure IDs are strings to avoid numeric coercion
+    const user = results[0];
+    const formatted = {
+      ...user,
+      id: user.id != null ? String(user.id) : null,
+      department_id: user.department_id != null ? String(user.department_id) : null,
+      role_id: user.role_id != null ? String(user.role_id) : null
+    };
+    
+    res.json(formatted);
+  });
+});
 
 /**
  * Create New User
@@ -566,6 +610,41 @@ app.get('/leave_request/user/:user_id', (req, res) => {
     if (results.length === 0) {
       return res.status(404).json({ error: 'No leave requests found for this user' });
     }
+    res.json(results);
+  });
+});
+
+/**
+ * Get Leave Requests by Department (for deans)
+ * GET /leave_request/department/:department_id
+ * Returns: Array of leave requests from users in the specified department
+ */
+app.get('/leave_request/department/:department_id', (req, res) => {
+  const department_id = req.params.department_id;
+  
+  const sql = `
+    SELECT lr.*, u.name AS employee_name, u.department_id, d.name AS department_name
+    FROM leave_request lr
+    LEFT JOIN users u ON lr.user_id = u.id
+    LEFT JOIN department d ON u.department_id = d.id
+    WHERE u.department_id = ?
+    ORDER BY lr.created_at DESC
+  `;
+  
+  db.query(sql, [department_id], (err, results) => {
+    if (err) {
+      console.error('Database error in /leave_request/department:', err);
+      return res.status(500).json({ error: 'Database query error', details: err.message });
+    }
+    
+    if (results.length === 0) {
+      return res.status(404).json({ 
+        error: 'No leave requests found for this department',
+        department_id: department_id 
+      });
+    }
+    
+    console.log(`Found ${results.length} leave requests for department ${department_id}`);
     res.json(results);
   });
 });
