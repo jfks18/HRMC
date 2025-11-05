@@ -155,17 +155,22 @@ function authenticateToken(req, res, next) {
 }
 // MySQL connection setup
 const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'gwc_hrms',
+  connectTimeout: 10000,
+  acquireTimeout: 10000,
+  timeout: 20000
 });
 
 db.connect((err) => {
   if (err) {
     console.error('MySQL connection error:', err);
+    console.error('Database connection failed, but server will continue running');
+    // Don't crash the server, just log the error
   } else {
-    console.log('Connected to MySQL database');
+    console.log('Connected to MySQL database successfully');
   }
 });
 
@@ -215,6 +220,16 @@ const sendWelcomeEmail = async (email, name, password) => {
           <strong>Important:</strong> Please keep this information secure and consider changing your password after your first login.
         </p>
         
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="https://hrmc.onrender.com/" 
+             style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+            Access HRMC System
+          </a>
+        </div>
+        
+        <p>Click the button above to access your HRMC account, or copy and paste this link into your browser:</p>
+        <p style="color: #007bff; word-break: break-all;">https://hrmc.onrender.com/</p>
+        
         <p>If you have any questions, please contact the HR department.</p>
         
         <p>Best regards,<br>HRMC Administration Team</p>
@@ -239,6 +254,123 @@ const sendWelcomeEmail = async (email, name, password) => {
  */
 app.get('/', (req, res) => {
   res.json({ message: 'API is running!' });
+});
+
+// Serve Socket.IO test page
+app.get('/test-socket', (req, res) => {
+  res.sendFile(__dirname + '/test-socket.html');
+});
+
+app.get('/leave_cred', (req, res) => {
+  const sql = 'SELECT `id`, `type`, `credits` FROM `leave_cred` WHERE 1';
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    res.json(results);
+  });
+});
+
+/**
+ * Get Leave Balance for User
+ * GET /leave_balance/:user_id
+ * Returns: Leave credits and used days for each leave type for the specified user
+ */
+app.get('/leave_balance/:user_id', (req, res) => {
+  const user_id = req.params.user_id;
+  const year = req.query.year || new Date().getFullYear();
+  
+  // Get all leave credit types
+  const creditsQuery = 'SELECT `id`, `type`, `credits` FROM `leave_cred` WHERE 1';
+  
+  db.query(creditsQuery, (err, credits) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    
+    // Get used leave days for the specified user and year (only approved requests)
+    const usedQuery = `
+      SELECT 
+        type,
+        SUM(DATEDIFF(end_date, start_date) + 1) as used_days
+      FROM leave_request 
+      WHERE user_id = ? 
+        AND is_approve = 1 
+        AND YEAR(start_date) = ?
+      GROUP BY type
+    `;
+    
+    db.query(usedQuery, [user_id, year], (err, usedResults) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database query error', details: err });
+      }
+      
+      // Create a map of used days by leave type
+      const usedMap = {};
+      usedResults.forEach(row => {
+        usedMap[row.type] = parseInt(row.used_days) || 0;
+      });
+      
+      // Calculate remaining leave for each type
+      const leaveBalance = credits.map(credit => {
+        const usedDays = usedMap[credit.type] || 0;
+        const remainingDays = credit.credits - usedDays;
+        
+        return {
+          id: credit.id,
+          type: credit.type,
+          total_credits: credit.credits,
+          used_days: usedDays,
+          remaining_days: Math.max(0, remainingDays), // Ensure non-negative
+          year: parseInt(year)
+        };
+      });
+      
+      res.json({
+        user_id: parseInt(user_id),
+        year: parseInt(year),
+        leave_balance: leaveBalance
+      });
+    });
+  });
+});
+
+/**
+ * Get Leave Summary for All Users
+ * GET /leave_summary
+ * Returns: Leave balance summary for all users
+ */
+app.get('/leave_summary', (req, res) => {
+  const year = req.query.year || new Date().getFullYear();
+  
+  const summaryQuery = `
+    SELECT 
+      u.id as user_id,
+      u.name as user_name,
+      lc.type as leave_type,
+      lc.credits as total_credits,
+      COALESCE(SUM(DATEDIFF(lr.end_date, lr.start_date) + 1), 0) as used_days,
+      (lc.credits - COALESCE(SUM(DATEDIFF(lr.end_date, lr.start_date) + 1), 0)) as remaining_days
+    FROM users u
+    CROSS JOIN leave_cred lc
+    LEFT JOIN leave_request lr ON u.id = lr.user_id 
+      AND lr.type = lc.type 
+      AND lr.is_approve = 1 
+      AND YEAR(lr.start_date) = ?
+    GROUP BY u.id, u.name, lc.type, lc.credits
+    ORDER BY u.name, lc.type
+  `;
+  
+  db.query(summaryQuery, [year], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database query error', details: err });
+    }
+    
+    res.json({
+      year: parseInt(year),
+      summary: results
+    });
+  });
 });
 
 /**
@@ -273,6 +405,50 @@ app.get('/users', (req, res) => {
     res.json(formatted);
   });
 });
+
+/**
+ * Debug endpoint: Get all users with basic info
+ * GET /users/debug/all
+ * Returns: List of all users for debugging purposes
+ */
+app.get('/users/debug/all', (req, res) => {
+  const sql = `
+    SELECT 
+      u.id,
+      u.name,
+      u.email,
+      u.role_id,
+      u.department_id,
+      r.name AS role_name,
+      d.name AS department_name
+    FROM users u
+    LEFT JOIN roles r ON u.role_id = r.id
+    LEFT JOIN department d ON u.department_id = d.id
+    ORDER BY u.id
+  `;
+  
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error('Database error in GET /users/debug/all:', err);
+      return res.status(500).json({ error: 'Database query error', details: err.message });
+    }
+    
+    console.log(`Debug: Found ${results.length} users in database`);
+    res.json({
+      total_users: results.length,
+      users: results.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role_id: u.role_id,
+        role_name: u.role_name,
+        department_id: u.department_id,
+        department_name: u.department_name
+      }))
+    });
+  });
+});
+
 //get roles
 app.get('/roles', (req, res) => {
   db.query('SELECT id, name FROM roles', (err, results) => {
@@ -344,8 +520,12 @@ app.get('/users/:id/name', (req, res) => {
 app.get('/users/:id', (req, res) => {
   const userId = req.params.id;
   
-  // Add debugging information
-  console.log(`GET /users/${userId} - Looking up user with ID:`, userId, 'Type:', typeof userId);
+  // Enhanced debugging for dean user lookup
+  console.log(`=== GET /users/${userId} Debug ===`);
+  console.log('Requested user ID:', userId);
+  console.log('User ID type:', typeof userId);
+  console.log('User ID length:', userId ? userId.length : 'null');
+  console.log('User ID trimmed:', userId ? userId.trim() : 'null');
   
   const sql = `
     SELECT 
@@ -369,24 +549,30 @@ app.get('/users/:id', (req, res) => {
       return res.status(500).json({ error: 'Database query error', details: err.message });
     }
     
-    console.log(`User lookup for ID ${userId}: Found ${results.length} results`);
+    console.log(`Query results for user ${userId}:`, results);
+    console.log(`Found ${results.length} users`);
     
     if (results.length === 0) {
-      // Add additional debugging: try to find similar IDs
-      const debugSql = `SELECT id, name, email FROM users WHERE id LIKE ? OR CAST(id AS CHAR) LIKE ? LIMIT 5`;
-      db.query(debugSql, [`%${userId}%`, `%${userId}%`], (debugErr, debugResults) => {
-        if (!debugErr && debugResults.length > 0) {
-          console.log('Similar user IDs found:', debugResults.map(u => ({ id: u.id, name: u.name, email: u.email })));
+      // Get first 5 users for debugging
+      db.query('SELECT id, name, email FROM users LIMIT 5', (debugErr, debugResults) => {
+        if (!debugErr && debugResults) {
+          console.log('Sample users in database for comparison:');
+          debugResults.forEach((user, index) => {
+            console.log(`  ${index + 1}. ID: "${user.id}" (type: ${typeof user.id}), Name: "${user.name}", Email: "${user.email}"`);
+          });
         }
-        console.log(`User ${userId} not found. Available users (first 5):`, debugResults ? debugResults : 'Could not fetch debug data');
+        
+        console.log(`❌ User ${userId} not found in database`);
+        return res.status(404).json({ 
+          error: 'User not found',
+          debug_info: {
+            requested_id: userId,
+            requested_type: typeof userId,
+            sample_users: debugResults ? debugResults.map(u => ({ id: u.id, name: u.name })) : []
+          }
+        });
       });
-      
-      return res.status(404).json({ 
-        error: 'User not found',
-        requested_id: userId,
-        id_type: typeof userId,
-        debug_info: 'Check server logs for similar IDs'
-      });
+      return;
     }
     
     // Ensure IDs are strings to avoid numeric coercion
@@ -398,51 +584,10 @@ app.get('/users/:id', (req, res) => {
       role_id: user.role_id != null ? String(user.role_id) : null
     };
     
-    console.log(`Successfully found user:`, { id: formatted.id, name: formatted.name, department: formatted.department_name });
-    res.json(formatted);
-  });
-});
-
-/**
- * Debug endpoint: Get all users with basic info
- * GET /users/debug/all
- * Returns: List of all users for debugging purposes
- */
-app.get('/users/debug/all', (req, res) => {
-  const sql = `
-    SELECT 
-      u.id,
-      u.name,
-      u.email,
-      u.role_id,
-      u.department_id,
-      r.name AS role_name,
-      d.name AS department_name
-    FROM users u
-    LEFT JOIN roles r ON u.role_id = r.id
-    LEFT JOIN department d ON u.department_id = d.id
-    ORDER BY u.id
-  `;
-  
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error('Database error in GET /users/debug/all:', err);
-      return res.status(500).json({ error: 'Database query error', details: err.message });
-    }
+    console.log(`✅ User ${userId} found:`, formatted);
+    console.log('=== End Debug ===');
     
-    console.log(`Debug: Found ${results.length} users in database`);
-    res.json({
-      total_users: results.length,
-      users: results.map(u => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role_id: u.role_id,
-        role_name: u.role_name,
-        department_id: u.department_id,
-        department_name: u.department_name
-      }))
-    });
+    res.json(formatted);
   });
 });
 
@@ -583,7 +728,7 @@ app.post('/auth/refresh', (req, res) => {
   const rtoken = req.cookies && req.cookies.refreshToken;
   if (!rtoken) return res.status(401).json({ error: 'no_refresh' });
   if (db && typeof db.query === 'function') {
-    db.query('SELECT user_id, expires_at FROM refresh_tokens WHERE token = ?', [rtoken], (err, rows) => {
+    db.query('SELECT user_id, expires_at FROM ref resh_tokens WHERE token = ?', [rtoken], (err, rows) => {
       if (err) return res.status(500).json({ error: 'db' });
       if (!rows || rows.length === 0) return res.status(401).json({ error: 'invalid_refresh' });
       const rec = rows[0];
@@ -704,8 +849,8 @@ app.get('/leave_request/department/:department_id', (req, res) => {
     }
     
     if (results.length === 0) {
-      console.log(`No leave requests found for department ${department_id}`);
-      return res.json([]); // Return empty array instead of 404
+      console.log(`No leave requests found for department ${department_id} - returning empty array`);
+      return res.json([]); // Return empty array instead of 404 error
     }
     
     // Log department details for debugging
@@ -758,123 +903,6 @@ app.delete('/leave_request/:id', (req, res) => {
       return res.status(404).json({ error: 'Leave request not found' });
     }
     res.json({ message: 'Leave request deleted' });
-  });
-});
-
-/**
- * Get All Leave Credits
- * GET /leave_cred
- * Returns: List of all leave credit types with their allocations
- */
-app.get('/leave_cred', (req, res) => {
-  const sql = 'SELECT `id`, `type`, `credits` FROM `leave_cred` WHERE 1';
-  db.query(sql, (err, results) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database query error', details: err });
-    }
-    res.json(results);
-  });
-});
-
-/**
- * Get Leave Balance for User
- * GET /leave_balance/:user_id
- * Returns: Leave credits and used days for each leave type for the specified user
- */
-app.get('/leave_balance/:user_id', (req, res) => {
-  const user_id = req.params.user_id;
-  const year = req.query.year || new Date().getFullYear();
-  
-  // Get all leave credit types
-  const creditsQuery = 'SELECT `id`, `type`, `credits` FROM `leave_cred` WHERE 1';
-  
-  db.query(creditsQuery, (err, credits) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database query error', details: err });
-    }
-    
-    // Get used leave days for the specified user and year (only approved requests)
-    const usedQuery = `
-      SELECT 
-        type,
-        SUM(DATEDIFF(end_date, start_date) + 1) as used_days
-      FROM leave_request 
-      WHERE user_id = ? 
-        AND is_approve = 1 
-        AND YEAR(start_date) = ?
-      GROUP BY type
-    `;
-    
-    db.query(usedQuery, [user_id, year], (err, usedResults) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database query error', details: err });
-      }
-      
-      // Create a map of used days by leave type
-      const usedMap = {};
-      usedResults.forEach(row => {
-        usedMap[row.type] = parseInt(row.used_days) || 0;
-      });
-      
-      // Calculate remaining leave for each type
-      const leaveBalance = credits.map(credit => {
-        const usedDays = usedMap[credit.type] || 0;
-        const remainingDays = credit.credits - usedDays;
-        
-        return {
-          id: credit.id,
-          type: credit.type,
-          total_credits: credit.credits,
-          used_days: usedDays,
-          remaining_days: Math.max(0, remainingDays), // Ensure non-negative
-          year: parseInt(year)
-        };
-      });
-      
-      res.json({
-        user_id: parseInt(user_id),
-        year: parseInt(year),
-        leave_balance: leaveBalance
-      });
-    });
-  });
-});
-
-/**
- * Get Leave Summary for All Users
- * GET /leave_summary
- * Returns: Leave balance summary for all users
- */
-app.get('/leave_summary', (req, res) => {
-  const year = req.query.year || new Date().getFullYear();
-  
-  const summaryQuery = `
-    SELECT 
-      u.id as user_id,
-      u.name as user_name,
-      lc.type as leave_type,
-      lc.credits as total_credits,
-      COALESCE(SUM(DATEDIFF(lr.end_date, lr.start_date) + 1), 0) as used_days,
-      (lc.credits - COALESCE(SUM(DATEDIFF(lr.end_date, lr.start_date) + 1), 0)) as remaining_days
-    FROM users u
-    CROSS JOIN leave_cred lc
-    LEFT JOIN leave_request lr ON u.id = lr.user_id 
-      AND lr.type = lc.type 
-      AND lr.is_approve = 1 
-      AND YEAR(lr.start_date) = ?
-    GROUP BY u.id, u.name, lc.type, lc.credits
-    ORDER BY u.name, lc.type
-  `;
-  
-  db.query(summaryQuery, [year], (err, results) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database query error', details: err });
-    }
-    
-    res.json({
-      year: parseInt(year),
-      summary: results
-    });
   });
 });
 
@@ -1161,7 +1189,7 @@ app.post('/evaluation', async (req, res) => {
   const randomNum = Math.floor(10000 + Math.random() * 90000); // 5 digits
   const evaluation_id = `${year}${month}${randomNum}`;
   try {
-    const [result] = await db.execute(
+    const [result] = await db.promise().execute(
       'INSERT INTO evaluation (id, teacher_id, student_id, expires_at, password, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [evaluation_id, teacher_id, student_id, expires_at, password, status, created_by]
     );
@@ -1232,72 +1260,6 @@ app.post('/evaluation_answers', async (req, res) => {
   }
 });
 
-// Get all answers for an evaluation
-app.get('/evaluation_answers/:evaluation_id', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(
-      'SELECT * FROM evaluation_answers WHERE evaluation_id = ?',
-      [req.params.evaluation_id]
-    );
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --- Evaluation Question API ---
-// Create question (fix typo: use evaluation_question)
-app.post('/evaluation_question', async (req, res) => {
-  const { evaluation_id, question_text } = req.body;
-  try {
-    const [result] = await db.execute(
-      'INSERT INTO evaluation_questions (evaluation_id, question_text) VALUES (?, ?)',
-      [evaluation_id, question_text]
-    );
-    res.json({ id: result.insertId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Check if student has already evaluated today
-app.get('/evaluation/check-student-today/:student_id', async (req, res) => {
-  const { student_id } = req.params;
-  
-  try {
-    // Check if student has any evaluation answers for today
-    const [rows] = await db.promise().query(`
-      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
-             e.teacher_id, u.name as teacher_name
-      FROM evaluation_answers ea
-      JOIN evaluation e ON ea.evaluation_id = e.id
-      LEFT JOIN users u ON e.teacher_id = u.id
-      WHERE ea.student_id = ? 
-      AND DATE(ea.created_at) = CURDATE()
-    `, [student_id]);
-    
-    if (rows.length > 0) {
-      return res.json({
-        hasEvaluated: true,
-        message: 'Student has already completed an evaluation today',
-        evaluations: rows.map(row => ({
-          evaluation_id: row.evaluation_id,
-          teacher_id: row.teacher_id,
-          teacher_name: row.teacher_name,
-          completed_at: row.created_at
-        }))
-      });
-    } else {
-      return res.json({
-        hasEvaluated: false,
-        message: 'Student can proceed with evaluation'
-      });
-    }
-  } catch (err) {
-    console.error('Error checking student evaluation status:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // Check if student has already submitted for a specific evaluation
 app.get('/evaluation/check-student-evaluation/:student_id/:evaluation_id', async (req, res) => {
@@ -1306,7 +1268,7 @@ app.get('/evaluation/check-student-evaluation/:student_id/:evaluation_id', async
   try {
     // Check if student has already submitted answers for this specific evaluation
     const [rows] = await db.promise().query(`
-      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
+      SELECT DISTINCT ea.evaluation_id, ea.student_id,
              e.teacher_id, u.name as teacher_name, e.created_at as evaluation_created
       FROM evaluation_answers ea
       JOIN evaluation e ON ea.evaluation_id = e.id
@@ -1323,7 +1285,6 @@ app.get('/evaluation/check-student-evaluation/:student_id/:evaluation_id', async
         evaluation_id: evaluation.evaluation_id,
         teacher_id: evaluation.teacher_id,
         teacher_name: evaluation.teacher_name,
-        completed_at: evaluation.created_at,
         evaluation_created: evaluation.evaluation_created
       });
     } else {
@@ -1338,7 +1299,6 @@ app.get('/evaluation/check-student-evaluation/:student_id/:evaluation_id', async
   }
 });
 
-// Validate student and evaluation for login - comprehensive check
 app.post('/evaluation/validate-login', async (req, res) => {
   const { student_id, evaluation_code } = req.body;
   
@@ -1415,11 +1375,11 @@ app.post('/evaluation/validate-login', async (req, res) => {
     
     // Step 4: Check if student has already submitted answers for this evaluation
     const [answerRows] = await db.promise().query(`
-      SELECT DISTINCT ea.evaluation_id, ea.student_id, ea.created_at,
+      SELECT DISTINCT ea.evaluation_id, ea.student_id,
              COUNT(ea.id) as answer_count
       FROM evaluation_answers ea
       WHERE ea.student_id = ? AND ea.evaluation_id = ?
-      GROUP BY ea.evaluation_id, ea.student_id, ea.created_at
+      GROUP BY ea.evaluation_id, ea.student_id
     `, [student_id, evaluation.id]);
     
     if (answerRows.length > 0) {
@@ -1436,7 +1396,6 @@ app.post('/evaluation/validate-login', async (req, res) => {
           expires_at: evaluation.expires_at
         },
         completion_details: {
-          completed_at: completedEvaluation.created_at,
           answer_count: completedEvaluation.answer_count
         },
         message: 'You have already completed this evaluation. Duplicate submissions are not allowed.',
@@ -1469,6 +1428,73 @@ app.post('/evaluation/validate-login', async (req, res) => {
       message: 'An error occurred while validating your credentials. Please try again.',
       details: err.message 
     });
+  }
+});
+
+// Get all answers for an evaluation
+app.get('/evaluation_answers/:evaluation_id', async (req, res) => {
+  try {
+    const [rows] = await db.promise().query(
+      'SELECT * FROM evaluation_answers WHERE evaluation_id = ?',
+      [req.params.evaluation_id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Evaluation Question API ---
+// Create question (fix typo: use evaluation_question)
+app.post('/evaluation_question', async (req, res) => {
+  const { evaluation_id, question_text } = req.body;
+  try {
+    const [result] = await db.execute(
+      'INSERT INTO evaluation_questions (evaluation_id, question_text) VALUES (?, ?)',
+      [evaluation_id, question_text]
+    );
+    res.json({ id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Check if student has already evaluated today
+app.get('/evaluation/check-student-today/:student_id', async (req, res) => {
+  const { student_id } = req.params;
+  
+  try {
+    // Check if student has any evaluation answers for today
+    const [rows] = await db.promise().query(`
+      SELECT DISTINCT ea.evaluation_id, ea.student_id,
+             e.teacher_id, u.name as teacher_name, e.created_at as evaluation_created
+      FROM evaluation_answers ea
+      JOIN evaluation e ON ea.evaluation_id = e.id
+      LEFT JOIN users u ON e.teacher_id = u.id
+      WHERE ea.student_id = ? 
+      AND DATE(e.created_at) = CURDATE()
+    `, [student_id]);
+    
+    if (rows.length > 0) {
+      return res.json({
+        hasEvaluated: true,
+        message: 'Student has already completed an evaluation today',
+        evaluations: rows.map(row => ({
+          evaluation_id: row.evaluation_id,
+          teacher_id: row.teacher_id,
+          teacher_name: row.teacher_name,
+          evaluation_created: row.evaluation_created
+        }))
+      });
+    } else {
+      return res.json({
+        hasEvaluated: false,
+        message: 'Student can proceed with evaluation'
+      });
+    }
+  } catch (err) {
+    console.error('Error checking student evaluation status:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1793,13 +1819,19 @@ app.get('/evaluation/stats', async (req, res) => {
       LEFT JOIN evaluation_answers ea ON e.id = ea.evaluation_id
     `);
 
-    // Get status breakdown
+    // Get status breakdown (using a simple count for now since status column may not exist)
     const [statusBreakdown] = await db.promise().query(`
       SELECT 
-        status,
+        'active' as status,
         COUNT(*) as count
       FROM evaluation
-      GROUP BY status
+      WHERE expires_at > NOW()
+      UNION ALL
+      SELECT 
+        'expired' as status,
+        COUNT(*) as count
+      FROM evaluation
+      WHERE expires_at <= NOW()
     `);
 
     // Get recent evaluations
@@ -1807,13 +1839,11 @@ app.get('/evaluation/stats', async (req, res) => {
       SELECT 
         e.id,
         e.teacher_id,
-        e.student_id,
-        e.status,
-        e.created_at,
-        u.name as teacher_name
+        u.name as teacher_name,
+        e.expires_at
       FROM evaluation e
       LEFT JOIN users u ON e.teacher_id = u.id
-      ORDER BY e.created_at DESC
+      ORDER BY e.id DESC
       LIMIT 5
     `);
 
@@ -3247,7 +3277,17 @@ app.get('/students', (req, res) => {
   const sql = 'SELECT id, name, year, course FROM students ORDER BY name';
   db.query(sql, (err, results) => {
     if (err) {
-      return res.status(500).json({ error: 'Database query error', details: err });
+      console.error('GET /students error:', {
+        message: err.message,
+        code: err.code,
+        errno: err.errno,
+        sqlState: err.sqlState,
+        sqlMessage: err.sqlMessage,
+        sql: sql
+      });
+      // For GET endpoints, return empty array instead of error to prevent frontend iteration errors
+      console.warn('GET /students returning empty array due to database error');
+      return res.status(200).json([]);
     }
     // Ensure IDs are strings to avoid numeric coercion
     const formatted = results.map(row => ({
@@ -3269,10 +3309,25 @@ app.get('/students/:id', (req, res) => {
   
   db.query(sql, [studentId], (err, results) => {
     if (err) {
-      return res.status(500).json({ error: 'Database query error', details: err });
+      console.error('GET /students/:id error:', {
+        studentId: studentId,
+        message: err.message,
+        code: err.code,
+        errno: err.errno,
+        sqlState: err.sqlState,
+        sqlMessage: err.sqlMessage,
+        sql: sql
+      });
+      return res.status(500).json({ 
+        error: 'Database query error', 
+        details: err.message || err,
+        code: err.code,
+        studentId: studentId,
+        hint: err.code === 'ER_NO_SUCH_TABLE' ? 'Students table does not exist' : 'Check database connection and student ID format'
+      });
     }
     if (results.length === 0) {
-      return res.status(404).json({ error: 'Student not found' });
+      return res.status(404).json({ error: 'Student not found', studentId: studentId });
     }
     
     const student = results[0];
@@ -3294,26 +3349,36 @@ app.post('/students', (req, res) => {
     return res.status(400).json({ error: 'Missing required fields: id, name, year, and course are required' });
   }
 
-  // Validate student ID format (you can customize this as needed)
-  if (id.length < 3 || id.length > 20) {
-    return res.status(400).json({ error: 'Student ID must be between 3 and 20 characters' });
-  }
-  
   const sql = 'INSERT INTO students (id, name, year, course) VALUES (?, ?, ?, ?)';
-  const values = [id, name, year, course];
+  const values = [String(id), name, year, course]; // Ensure ID is stored as string
   
   db.query(sql, values, (err, result) => {
     if (err) {
-      if (err.code === 'ER_DUP_ENTRY') {
-        return res.status(409).json({ error: 'Student ID already exists. Please choose a different ID.' });
-      }
-      return res.status(500).json({ error: 'Database insert error', details: err.message || err });
+      console.error('POST /students error:', {
+        requestBody: { id, name, year, course },
+        message: err.message,
+        code: err.code,
+        errno: err.errno,
+        sqlState: err.sqlState,
+        sqlMessage: err.sqlMessage,
+        sql: sql,
+        values: values
+      });
+      
+      return res.status(500).json({ 
+        error: 'Database insert error', 
+        details: err.message || err,
+        code: err.code,
+        hint: err.code === 'ER_NO_SUCH_TABLE' ? 'Students table does not exist - run CREATE TABLE first' : 
+              err.code === 'ER_DUP_ENTRY' ? 'Student ID already exists - use a different ID' :
+              'Check database connection and field constraints'
+      });
     }
     
     res.status(201).json({ 
       message: 'Student created successfully', 
-      studentId: id,
-      id: id 
+      studentId: String(id),
+      id: String(id)
     });
   });
 });
@@ -3337,10 +3402,28 @@ app.put('/students/:id', (req, res) => {
   
   db.query(sql, values, (err, result) => {
     if (err) {
-      return res.status(500).json({ error: 'Database update error', details: err });
+      console.error('PUT /students/:id error:', {
+        studentId: studentId,
+        requestBody: { name, year, course },
+        message: err.message,
+        code: err.code,
+        errno: err.errno,
+        sqlState: err.sqlState,
+        sqlMessage: err.sqlMessage,
+        sql: sql,
+        values: values
+      });
+      return res.status(500).json({ 
+        error: 'Database update error', 
+        details: err.message || err,
+        code: err.code,
+        studentId: studentId,
+        hint: err.code === 'ER_NO_SUCH_TABLE' ? 'Students table does not exist' : 
+              'Check database connection and field constraints'
+      });
     }
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Student not found' });
+      return res.status(404).json({ error: 'Student not found', studentId: studentId });
     }
     res.json({ message: 'Student updated successfully' });
   });
@@ -3357,10 +3440,26 @@ app.delete('/students/:id', (req, res) => {
   
   db.query(sql, [studentId], (err, result) => {
     if (err) {
-      return res.status(500).json({ error: 'Database delete error', details: err });
+      console.error('DELETE /students/:id error:', {
+        studentId: studentId,
+        message: err.message,
+        code: err.code,
+        errno: err.errno,
+        sqlState: err.sqlState,
+        sqlMessage: err.sqlMessage,
+        sql: sql
+      });
+      return res.status(500).json({ 
+        error: 'Database delete error', 
+        details: err.message || err,
+        code: err.code,
+        studentId: studentId,
+        hint: err.code === 'ER_NO_SUCH_TABLE' ? 'Students table does not exist' : 
+              'Check database connection and CASCADE constraints'
+      });
     }
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Student not found' });
+      return res.status(404).json({ error: 'Student not found', studentId: studentId });
     }
     res.json({ message: 'Student deleted successfully' });
   });
@@ -3377,7 +3476,18 @@ app.get('/students/year/:year', (req, res) => {
   
   db.query(sql, [year], (err, results) => {
     if (err) {
-      return res.status(500).json({ error: 'Database query error', details: err });
+      console.error('GET /students/year/:year error:', {
+        year: year,
+        message: err.message,
+        code: err.code,
+        errno: err.errno,
+        sqlState: err.sqlState,
+        sqlMessage: err.sqlMessage,
+        sql: sql
+      });
+      // For GET endpoints, return empty array instead of error to prevent frontend iteration errors
+      console.warn(`GET /students/year/${year} returning empty array due to database error`);
+      return res.status(200).json([]);
     }
     
     // Ensure IDs are strings
@@ -3401,7 +3511,18 @@ app.get('/students/course/:course', (req, res) => {
   
   db.query(sql, [course], (err, results) => {
     if (err) {
-      return res.status(500).json({ error: 'Database query error', details: err });
+      console.error('GET /students/course/:course error:', {
+        course: course,
+        message: err.message,
+        code: err.code,
+        errno: err.errno,
+        sqlState: err.sqlState,
+        sqlMessage: err.sqlMessage,
+        sql: sql
+      });
+      // For GET endpoints, return empty array instead of error to prevent frontend iteration errors
+      console.warn(`GET /students/course/${course} returning empty array due to database error`);
+      return res.status(200).json([]);
     }
     
     // Ensure IDs are strings
@@ -3438,8 +3559,8 @@ app.use((req, res, next) => {
   next();
 });
 try {
-  // socket-integration is at repository root, one level up from api directory
-  const { attachSocket } = require('../socket-integration');
+  // socket-integration is at repository root
+  const { attachSocket } = require('./socket-integration');
   attachSocket({ app, server, db });
   console.log('Socket.IO integration attached');
 } catch (err) {
@@ -3655,9 +3776,33 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
+// Add health check endpoint
+app.get('/health', (req, res) => {
+  // Test database connection
+  db.ping((err) => {
+    if (err) {
+      console.error('Database health check failed:', err);
+      return res.status(503).json({ 
+        status: 'unhealthy', 
+        database: 'disconnected',
+        error: err.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+    res.json({ 
+      status: 'healthy', 
+      database: 'connected',
+      timestamp: new Date().toISOString(),
+      port: process.env.PORT || 5000
+    });
+  });
+});
+
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Environment:', process.env.NODE_ENV || 'development');
+  console.log('Database host:', process.env.DB_HOST || 'localhost');
 });
 
 
