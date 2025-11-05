@@ -169,9 +169,23 @@ export default function LeaveTable() {
           // If user not found, show empty list (dean must exist in database)
           if (userResponse.status === 404) {
             console.warn(`Dean user ${userId} not found in database`);
+            
+            // Try to get debug information about available users
+            try {
+              const debugResponse = await apiFetch('/api/proxy/users/debug/all', { 
+                headers: { 'Content-Type': 'application/json' } 
+              });
+              if (debugResponse.ok) {
+                const debugData = await debugResponse.json();
+                console.log('Available users in database:', debugData);
+              }
+            } catch (debugError) {
+              console.log('Could not fetch debug user list:', debugError);
+            }
+            
             setDepartmentName('User Not Found');
             setLeaveRequests([]);
-            setError('Dean user not found in database. Please contact administration.');
+            setError(`Dean user ID "${userId}" not found in database. Please verify your login or contact administration. Check browser console for available users.`);
             return;
           }
           

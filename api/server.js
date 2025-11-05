@@ -344,6 +344,9 @@ app.get('/users/:id/name', (req, res) => {
 app.get('/users/:id', (req, res) => {
   const userId = req.params.id;
   
+  // Add debugging information
+  console.log(`GET /users/${userId} - Looking up user with ID:`, userId, 'Type:', typeof userId);
+  
   const sql = `
     SELECT 
       u.id,
@@ -365,8 +368,25 @@ app.get('/users/:id', (req, res) => {
       console.error('Database error in GET /users/:id:', err);
       return res.status(500).json({ error: 'Database query error', details: err.message });
     }
+    
+    console.log(`User lookup for ID ${userId}: Found ${results.length} results`);
+    
     if (results.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      // Add additional debugging: try to find similar IDs
+      const debugSql = `SELECT id, name, email FROM users WHERE id LIKE ? OR CAST(id AS CHAR) LIKE ? LIMIT 5`;
+      db.query(debugSql, [`%${userId}%`, `%${userId}%`], (debugErr, debugResults) => {
+        if (!debugErr && debugResults.length > 0) {
+          console.log('Similar user IDs found:', debugResults.map(u => ({ id: u.id, name: u.name, email: u.email })));
+        }
+        console.log(`User ${userId} not found. Available users (first 5):`, debugResults ? debugResults : 'Could not fetch debug data');
+      });
+      
+      return res.status(404).json({ 
+        error: 'User not found',
+        requested_id: userId,
+        id_type: typeof userId,
+        debug_info: 'Check server logs for similar IDs'
+      });
     }
     
     // Ensure IDs are strings to avoid numeric coercion
@@ -378,7 +398,51 @@ app.get('/users/:id', (req, res) => {
       role_id: user.role_id != null ? String(user.role_id) : null
     };
     
+    console.log(`Successfully found user:`, { id: formatted.id, name: formatted.name, department: formatted.department_name });
     res.json(formatted);
+  });
+});
+
+/**
+ * Debug endpoint: Get all users with basic info
+ * GET /users/debug/all
+ * Returns: List of all users for debugging purposes
+ */
+app.get('/users/debug/all', (req, res) => {
+  const sql = `
+    SELECT 
+      u.id,
+      u.name,
+      u.email,
+      u.role_id,
+      u.department_id,
+      r.name AS role_name,
+      d.name AS department_name
+    FROM users u
+    LEFT JOIN roles r ON u.role_id = r.id
+    LEFT JOIN department d ON u.department_id = d.id
+    ORDER BY u.id
+  `;
+  
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error('Database error in GET /users/debug/all:', err);
+      return res.status(500).json({ error: 'Database query error', details: err.message });
+    }
+    
+    console.log(`Debug: Found ${results.length} users in database`);
+    res.json({
+      total_users: results.length,
+      users: results.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role_id: u.role_id,
+        role_name: u.role_name,
+        department_id: u.department_id,
+        department_name: u.department_name
+      }))
+    });
   });
 });
 
