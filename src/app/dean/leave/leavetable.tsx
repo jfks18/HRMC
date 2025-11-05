@@ -8,6 +8,7 @@ interface LeaveRequest {
   id: number;
   user_id: number;
   user_name?: string;
+  employee_name?: string;
   type: string;
   start_date: string;
   end_date: string;
@@ -16,6 +17,10 @@ interface LeaveRequest {
   status: string;
   is_approve?: number | null;
   created_at: string;
+  department_id?: string;
+  department_name?: string;
+  role_id?: string;
+  role_name?: string;
 }
 
 // Helper function to format dates
@@ -109,7 +114,18 @@ export default function LeaveTable() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const userId = localStorage.getItem('userId');
-      console.log('Retrieved current user ID from localStorage:', userId);
+      const userRole = localStorage.getItem('userRole');
+      const userName = localStorage.getItem('userName');
+      const authToken = localStorage.getItem('authToken');
+      
+      console.log('Dean Leave Table - localStorage debug:', {
+        userId,
+        userRole,
+        userName,
+        hasAuthToken: !!authToken,
+        tokenLength: authToken ? authToken.length : 0
+      });
+      
       setCurrentUserId(userId);
     }
   }, []);
@@ -123,21 +139,60 @@ export default function LeaveTable() {
       try {
         // First get the current dean's department information
         const userId = localStorage.getItem('userId');
-        if (!userId) {
-          throw new Error('User ID not found. Please log in again.');
+        if (!userId || userId.trim() === '' || userId === 'undefined' || userId === 'null') {
+          console.error('Invalid user ID in localStorage:', userId);
+          throw new Error('User ID not found or invalid. Please log in again.');
         }
         
-        console.log('Fetching dean user info to get department ID');
+        console.log('Fetching dean user info to get department ID for userId:', userId);
         
         const { apiFetch } = await import('../../apiFetch');
         
         // Get dean's user information including department_id
+        console.log('Making request to:', `/api/proxy/users/${userId}`);
         const userResponse = await apiFetch(`/api/proxy/users/${userId}`, { 
           headers: { 'Content-Type': 'application/json' } 
         });
         
+        console.log('User response status:', userResponse.status);
+        
         if (!userResponse.ok) {
-          throw new Error(`Failed to fetch user information: HTTP ${userResponse.status}`);
+          // Log the response for debugging
+          const responseText = await userResponse.text().catch(() => 'Unable to read response');
+          console.error('User fetch failed:', {
+            status: userResponse.status,
+            statusText: userResponse.statusText,
+            response: responseText,
+            userId: userId
+          });
+          
+          // If user not found, fall back to showing all leave requests
+          if (userResponse.status === 404) {
+            console.warn(`User ${userId} not found in database, showing all leave requests`);
+            setDepartmentName('All Departments (User not found)');
+            
+            // Fetch all leave requests as fallback
+            const response = await apiFetch('/api/proxy/leave_request', { 
+              headers: { 'Content-Type': 'application/json' } 
+            });
+            
+            if (!response.ok) {
+              if (response.status === 404) {
+                setLeaveRequests([]);
+                setError('No leave requests found');
+                return;
+              }
+              throw new Error(`HTTP ${response.status}: Failed to fetch leave requests`);
+            }
+            
+            const data = await response.json();
+            console.log('Fetched all leave requests (fallback):', data);
+            setLeaveRequests(data);
+            setError('');
+            return;
+          }
+          
+          throw new Error(`Failed to fetch user information: HTTP ${userResponse.status} - ${responseText}`);
         }
         
         const userData = await userResponse.json();
@@ -355,7 +410,12 @@ export default function LeaveTable() {
     { key: 'user_name', header: 'Employee', render: (_v, row) => (
       <div>
         <div className="fw-semibold">{(row as any).user_name || (row as any).employee_name || String(row.user_id)}</div>
-        <div className="text-muted small">ID: {row.user_id}</div>
+        <div className="text-muted small">
+          ID: {row.user_id}
+          {(row as any).role_name && (
+            <span className="badge bg-light text-dark ms-1">{(row as any).role_name}</span>
+          )}
+        </div>
       </div>
     ) },
     { 

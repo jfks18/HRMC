@@ -623,10 +623,12 @@ app.get('/leave_request/department/:department_id', (req, res) => {
   const department_id = req.params.department_id;
   
   const sql = `
-    SELECT lr.*, u.name AS employee_name, u.department_id, d.name AS department_name
+    SELECT lr.*, u.name AS employee_name, u.department_id, u.role_id, 
+           d.name AS department_name, r.name AS role_name
     FROM leave_request lr
     LEFT JOIN users u ON lr.user_id = u.id
     LEFT JOIN department d ON u.department_id = d.id
+    LEFT JOIN roles r ON u.role_id = r.id
     WHERE u.department_id = ?
     ORDER BY lr.created_at DESC
   `;
@@ -644,7 +646,15 @@ app.get('/leave_request/department/:department_id', (req, res) => {
       });
     }
     
+    // Log department details for debugging
+    const uniqueEmployees = [...new Set(results.map(r => r.employee_name))];
+    const uniqueRoles = [...new Set(results.map(r => r.role_name).filter(Boolean))];
+    
     console.log(`Found ${results.length} leave requests for department ${department_id}`);
+    console.log(`- Department: ${results[0]?.department_name || 'Unknown'}`);
+    console.log(`- Employees: ${uniqueEmployees.join(', ')}`);
+    console.log(`- Roles: ${uniqueRoles.join(', ')}`);
+    
     res.json(results);
   });
 });
