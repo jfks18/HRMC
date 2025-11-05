@@ -9,12 +9,12 @@ type Message = { id?: number | null; room: string; sender_id?: string | null; se
 // - Prefer NEXT_PUBLIC_SOCKET_URL when provided
 // - Otherwise use localhost for local development
 const SOCKET_URL = (() => {
-  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
   if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL;
-  // runtime override via devtools: window.__NGROK_URL
+  // runtime override via devtools: window.__NGROK_URL  
   // @ts-ignore
   if (typeof window.__NGROK_URL === 'string' && window.__NGROK_URL) return window.__NGROK_URL;
-  return 'http://localhost:5000';
+  return 'http://localhost:4000';
 })();
 
 export default function ChatWidget() {
