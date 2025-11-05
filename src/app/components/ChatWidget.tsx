@@ -9,12 +9,12 @@ type Message = { id?: number | null; room: string; sender_id?: string | null; se
 // - Prefer NEXT_PUBLIC_SOCKET_URL when provided
 // - Otherwise use localhost for local development
 const SOCKET_URL = (() => {
-  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
+  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_SOCKET_URL || 'https://buck-leading-pipefish.ngrok-free.app';
   if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL;
   // runtime override via devtools: window.__NGROK_URL  
   // @ts-ignore
   if (typeof window.__NGROK_URL === 'string' && window.__NGROK_URL) return window.__NGROK_URL;
-  return 'http://localhost:4000';
+  return 'https://buck-leading-pipefish.ngrok-free.app';
 })();
 
 export default function ChatWidget() {
@@ -147,9 +147,13 @@ export default function ChatWidget() {
   async function fetchDms(client?: Socket) {
     try {
       const token = getToken();
-      const url = (process.env.NEXT_PUBLIC_SOCKET_URL || '') + '/chat/dms';
-      const base = SOCKET_URL || '';
-      const resp = await fetch((base + '/chat/dms').replace('//chat', '/chat'), { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+      const base = SOCKET_URL || 'https://buck-leading-pipefish.ngrok-free.app';
+      const resp = await fetch((base + '/chat/dms').replace('//chat', '/chat'), { 
+        headers: { 
+          Authorization: token ? `Bearer ${token}` : '',
+          'ngrok-skip-browser-warning': 'true'
+        } 
+      });
       if (!resp.ok) return;
       const json = await resp.json();
       if (json && json.success && Array.isArray(json.dms)) setDms(json.dms);
@@ -293,8 +297,16 @@ export default function ChatWidget() {
                     // create deterministic dm room via server endpoint
                     (async () => {
                       const token = getToken();
-                      const base = SOCKET_URL || '';
-                      const resp = await fetch((base + '/chat/dm').replace('//chat', '/chat'), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' }, body: JSON.stringify({ other: u.id }) });
+                      const base = SOCKET_URL || 'https://buck-leading-pipefish.ngrok-free.app';
+                      const resp = await fetch((base + '/chat/dm').replace('//chat', '/chat'), { 
+                        method: 'POST', 
+                        headers: { 
+                          'Content-Type': 'application/json', 
+                          Authorization: token ? `Bearer ${token}` : '',
+                          'ngrok-skip-browser-warning': 'true'
+                        }, 
+                        body: JSON.stringify({ other: u.id }) 
+                      });
                       if (!resp.ok) return;
                       const j = await resp.json();
                       if (j && j.success && j.room) openRoom(j.room);
