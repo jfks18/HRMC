@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../../apiFetch';
 import { Table, TableColumn } from '../../components/Table';
 import GlobalSearchFilter from '../../components/GlobalSearchFilter';
+import { showSuccessToast, showErrorToast, showWarningToast } from '../../utils/toast';
 
 interface LeaveRequest {
   id: number;
@@ -267,11 +268,11 @@ export default function LeaveTable() {
       );
 
       // Show success toast notification
-      showToast(`Leave request #${requestId} has been approved successfully.`, 'success');
+      showSuccessToast(`Leave request #${requestId} has been approved successfully.`, 'Request Approved');
 
     } catch (err: any) {
       console.error('Error approving leave request:', err);
-      showToast(`Failed to approve leave request: ${err.message || 'Unknown error'}`, 'danger');
+      showErrorToast(`Failed to approve leave request: ${err.message || 'Unknown error'}`, 'Approval Failed');
     } finally {
       setProcessingIds(prev => prev.filter(id => id !== requestId));
     }
@@ -303,11 +304,11 @@ export default function LeaveTable() {
       );
 
       // Show success toast notification
-      showToast(`Leave request #${requestId} has been rejected.`, 'warning');
+      showWarningToast(`Leave request #${requestId} has been rejected.`, 'Request Rejected');
 
     } catch (err: any) {
       console.error('Error rejecting leave request:', err);
-      showToast(`Failed to reject leave request: ${err.message || 'Unknown error'}`, 'danger');
+      showErrorToast(`Failed to reject leave request: ${err.message || 'Unknown error'}`, 'Rejection Failed');
     } finally {
       setProcessingIds(prev => prev.filter(id => id !== requestId));
     }
@@ -343,50 +344,13 @@ export default function LeaveTable() {
       );
 
       // Show success toast notification
-      showToast(`Leave request #${requestId} has been cancelled successfully.`, 'success');
+      showSuccessToast(`Leave request #${requestId} has been cancelled successfully.`, 'Request Cancelled');
 
     } catch (err: any) {
       console.error('Error cancelling leave request:', err);
-      showToast(`Failed to cancel leave request: ${err.message || 'Unknown error'}`, 'danger');
+      showErrorToast(`Failed to cancel leave request: ${err.message || 'Unknown error'}`, 'Cancellation Failed');
     } finally {
       setProcessingIds(prev => prev.filter(id => id !== requestId));
-    }
-  };
-
-  // Helper function to show toast notifications
-  const showToast = (message: string, type: string) => {
-    if (typeof window !== 'undefined' && (window as any).bootstrap) {
-      const bgClass = type === 'success' ? 'text-bg-success' : 
-                      type === 'warning' ? 'text-bg-warning' : 
-                      'text-bg-danger';
-      
-      const toastHtml = `
-        <div class="toast align-items-center ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-          <div class="d-flex">
-            <div class="toast-body">
-              ${message}
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-          </div>
-        </div>
-      `;
-      
-      const toastContainer = document.getElementById('toast-container') || (() => {
-        const container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'toast-container position-fixed top-0 end-0 p-3';
-        document.body.appendChild(container);
-        return container;
-      })();
-      
-      toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-      const toastElement = toastContainer.lastElementChild as HTMLElement;
-      const toast = new (window as any).bootstrap.Toast(toastElement);
-      toast.show();
-      
-      toastElement.addEventListener('hidden.bs.toast', () => {
-        toastElement.remove();
-      });
     }
   };
 

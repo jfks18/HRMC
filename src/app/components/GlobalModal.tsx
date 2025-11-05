@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { showSuccessToast, showErrorToast } from '../utils/toast';
 
 export interface GlobalModalField {
   key: string;
@@ -15,9 +16,11 @@ interface GlobalModalProps {
   title?: string;
   fields: GlobalModalField[];
   onClose: () => void;
-  onSubmit: (data: Record<string, any>) => void;
+  onSubmit: (data: Record<string, any>) => Promise<void> | void;
   submitText?: string;
   cancelText?: string;
+  successMessage?: string;
+  errorMessage?: string;
 }
 
 export default function GlobalModal({
@@ -28,6 +31,8 @@ export default function GlobalModal({
   onSubmit,
   submitText = "Submit",
   cancelText = "Cancel",
+  successMessage,
+  errorMessage,
 }: GlobalModalProps) {
   const [formData, setFormData] = useState<Record<string, any>>(() => {
     const initial: Record<string, any> = {};
@@ -58,10 +63,20 @@ export default function GlobalModal({
     onClose();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
-    // Form will be cleared when modal closes via the success callback
+    try {
+      await onSubmit(formData);
+      // Show success toast if provided
+      if (successMessage) {
+        showSuccessToast(successMessage);
+      }
+      // Form will be cleared when modal closes via the success callback
+    } catch (error: any) {
+      // Show error toast
+      const errorMsg = errorMessage || error.message || 'An error occurred while saving';
+      showErrorToast(errorMsg);
+    }
   };
 
   if (!show) return null;

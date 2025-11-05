@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../apiFetch';
 import GlobalModal, { GlobalModalField } from './GlobalModal';
+import { showSuccessToast, showErrorToast } from '../utils/toast';
 
 interface CertificateRequestFormProps {
   isOpen: boolean;
@@ -42,51 +43,6 @@ export default function CertificateRequestForm({
     },
   ];
 
-  const showToast = (message: string, type: string) => {
-    if (typeof window !== 'undefined' && (window as any).bootstrap) {
-      const bgClass = type === 'success' ? 'text-bg-success' : 
-                      type === 'warning' ? 'text-bg-warning' : 
-                      'text-bg-danger';
-      
-      const toastHtml = `
-        <div class="toast align-items-center ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-          <div class="d-flex">
-            <div class="toast-body">
-              ${message}
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-          </div>
-        </div>
-      `;
-
-      // Remove existing toasts
-      const existingContainer = document.querySelector('.toast-container');
-      if (existingContainer) {
-        existingContainer.remove();
-      }
-
-      // Create toast container
-      const toastContainer = document.createElement('div');
-      toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
-      toastContainer.innerHTML = toastHtml;
-      document.body.appendChild(toastContainer);
-
-      // Show toast
-      const toastElement = toastContainer.querySelector('.toast');
-      if (toastElement) {
-        const toast = new (window as any).bootstrap.Toast(toastElement);
-        toast.show();
-
-        // Auto-remove after showing
-        setTimeout(() => {
-          if (toastContainer && toastContainer.parentNode) {
-            toastContainer.parentNode.removeChild(toastContainer);
-          }
-        }, 5000);
-      }
-    }
-  };
-
   const handleSubmit = async (formData: Record<string, any>) => {
     try {
       const userId = localStorage.getItem('userId');
@@ -112,7 +68,7 @@ export default function CertificateRequestForm({
       }
 
       // Show success message
-      showToast('Certificate request submitted successfully!', 'success');
+      showSuccessToast('Certificate request submitted successfully!', 'Request Submitted');
       
       // Call success callback and close modal
       onSuccess();
@@ -120,7 +76,7 @@ export default function CertificateRequestForm({
       
     } catch (error) {
       console.error('Error submitting certificate request:', error);
-      showToast(error instanceof Error ? error.message : 'Failed to submit certificate request. Please try again.', 'danger');
+      showErrorToast(error instanceof Error ? error.message : 'Failed to submit certificate request. Please try again.', 'Submission Failed');
     }
   };
 

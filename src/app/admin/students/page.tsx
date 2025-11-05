@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '../../apiFetch';
+import { showSuccessToast, showErrorToast } from '../../utils/toast';
 
 interface Student {
   id: string;
@@ -109,6 +110,7 @@ export default function StudentsPage() {
       });
 
       if (response.ok) {
+        showSuccessToast('Student created successfully!', 'Success');
         setSuccess('Student created successfully!');
         setNewStudent({ id: '', name: '', year: '', course: '' });
         setShowCreateModal(false);
@@ -116,13 +118,19 @@ export default function StudentsPage() {
       } else {
         const errorData = await response.json();
         if (response.status === 409) {
-          setError('Student ID already exists. Please choose a different ID.');
+          const errorMsg = 'Student ID already exists. Please choose a different ID.';
+          showErrorToast(errorMsg, 'Duplicate Student ID');
+          setError(errorMsg);
         } else {
-          setError(errorData.error || 'Failed to create student');
+          const errorMsg = errorData.error || 'Failed to create student';
+          showErrorToast(errorMsg, 'Error Creating Student');
+          setError(errorMsg);
         }
       }
     } catch (err) {
-      setError('Error creating student');
+      const errorMsg = 'Error creating student';
+      showErrorToast(errorMsg, 'Network Error');
+      setError(errorMsg);
       console.error('Error:', err);
     } finally {
       setIsSubmitting(false);
@@ -156,16 +164,21 @@ export default function StudentsPage() {
       });
 
       if (response.ok) {
+        showSuccessToast('Student updated successfully!', 'Success');
         setSuccess('Student updated successfully!');
         setShowEditModal(false);
         setEditingStudent(null);
         fetchStudents();
       } else {
         const errorData = await response.json();
-        setError(errorData.error || 'Failed to update student');
+        const errorMsg = errorData.error || 'Failed to update student';
+        showErrorToast(errorMsg, 'Error Updating Student');
+        setError(errorMsg);
       }
     } catch (err) {
-      setError('Error updating student');
+      const errorMsg = 'Error updating student';
+      showErrorToast(errorMsg, 'Network Error');
+      setError(errorMsg);
       console.error('Error:', err);
     } finally {
       setIsSubmitting(false);
@@ -183,14 +196,19 @@ export default function StudentsPage() {
       });
 
       if (response.ok) {
+        showSuccessToast('Student deleted successfully!', 'Success');
         setSuccess('Student deleted successfully!');
         fetchStudents();
       } else {
         const errorData = await response.json();
-        setError(errorData.error || 'Failed to delete student');
+        const errorMsg = errorData.error || 'Failed to delete student';
+        showErrorToast(errorMsg, 'Error Deleting Student');
+        setError(errorMsg);
       }
     } catch (err) {
-      setError('Error deleting student');
+      const errorMsg = 'Error deleting student';
+      showErrorToast(errorMsg, 'Network Error');
+      setError(errorMsg);
       console.error('Error:', err);
     }
   };

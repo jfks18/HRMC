@@ -1,5 +1,6 @@
 
 import React, { useState } from "react";
+import { showSuccessToast, showErrorToast } from '../../utils/toast';
 
 export interface EditModalColumn<T> {
   key: keyof T;
@@ -13,10 +14,12 @@ interface EditModalProps<T> {
   initialData: T;
   columns: EditModalColumn<T>[];
   onClose: () => void;
-  onSubmit: (data: T) => void;
+  onSubmit: (data: T) => Promise<void> | void;
+  successMessage?: string;
+  errorMessage?: string;
 }
 
-export function EditModal<T>({ show, initialData, columns, onClose, onSubmit }: EditModalProps<T>) {
+export function EditModal<T>({ show, initialData, columns, onClose, onSubmit, successMessage, errorMessage }: EditModalProps<T>) {
   const [formData, setFormData] = useState<T>(initialData);
 
   if (!show) return null;
@@ -25,9 +28,19 @@ export function EditModal<T>({ show, initialData, columns, onClose, onSubmit }: 
     <div className="modal show d-block" tabIndex={-1}>
       <div className="modal-dialog">
         <form
-          onSubmit={e => {
+          onSubmit={async e => {
             e.preventDefault();
-            onSubmit(formData);
+            try {
+              await onSubmit(formData);
+              // Show success toast if provided
+              if (successMessage) {
+                showSuccessToast(successMessage);
+              }
+            } catch (error: any) {
+              // Show error toast
+              const errorMsg = errorMessage || error.message || 'An error occurred while saving';
+              showErrorToast(errorMsg);
+            }
           }}
         >
           <div className="modal-content">
