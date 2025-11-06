@@ -64,13 +64,18 @@ export default function FacultyLeaveManagementPage() {
   const handleLeaveSubmit = async (formData: Record<string, any>) => {
     try {
       if (!userId) {
-        alert('User not logged in. Please login first.');
-        return;
+        throw new Error('User not logged in. Please login first.');
       }
 
       // Calculate days between start and end date
       const startDate = new Date(formData.start_date);
       const endDate = new Date(formData.end_date);
+      if (!formData.start_date || !formData.end_date) {
+        throw new Error('Please select both start and end dates.');
+      }
+      if (endDate < startDate) {
+        throw new Error('End date cannot be earlier than start date.');
+      }
       const timeDifference = endDate.getTime() - startDate.getTime();
       const daysDifference = Math.ceil(timeDifference / (1000 * 3600 * 24)) + 1;
 
@@ -84,8 +89,7 @@ export default function FacultyLeaveManagementPage() {
         const leaveType = balanceData.leave_balance?.find((lb: any) => lb.type === formData.type);
         
         if (leaveType && leaveType.remaining_days < daysDifference) {
-          alert(`Insufficient ${formData.type} leave balance. You have ${leaveType.remaining_days} days remaining, but requested ${daysDifference} days.`);
-          return;
+          throw new Error(`Insufficient ${formData.type} leave balance. You have ${leaveType.remaining_days} days remaining, but requested ${daysDifference} days.`);
         }
       }
 
@@ -113,16 +117,17 @@ export default function FacultyLeaveManagementPage() {
       const result = await response.json();
       console.log('Leave request submitted successfully:', result);
       
-      // Close modal and show success toast
+  // Close modal and show success toast
       setShowLeaveModal(false);
-      setShowSuccessToast(true);
+  setShowSuccessToast(true);
       
       // Optionally refresh the leave table here
       window.location.reload();
 
     } catch (error: any) {
       console.error('Error submitting leave request:', error);
-      alert(`Error submitting leave request: ${error.message}`);
+      // Let GlobalModal show the toast via errorMessage
+      throw error;
     }
   };
 
@@ -166,9 +171,11 @@ export default function FacultyLeaveManagementPage() {
         onSubmit={handleLeaveSubmit}
         submitText="Submit Leave Request"
         cancelText="Cancel"
+        successMessage="Leave request submitted successfully!"
+        errorMessage="Failed to submit leave request"
       />
 
-      {/* Success Toast Notification */}
+      {/* Success Toast Notification (legacy UI fade-out) */}
       {showSuccessToast && (
         <div 
           className="toast-container position-fixed top-0 end-0 p-3"

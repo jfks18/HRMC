@@ -52,6 +52,12 @@ export default function LeavePage() {
       // Calculate days between start and end date
       const startDate = new Date(formData.start_date);
       const endDate = new Date(formData.end_date);
+      if (!formData.start_date || !formData.end_date) {
+        throw new Error('Please select both start and end dates.');
+      }
+      if (endDate < startDate) {
+        throw new Error('End date cannot be earlier than start date.');
+      }
       const timeDifference = endDate.getTime() - startDate.getTime();
       const daysDifference = Math.ceil(timeDifference / (1000 * 3600 * 24)) + 1;
 
@@ -90,37 +96,6 @@ export default function LeavePage() {
       const result = await response.json();
       console.log('Leave request submitted successfully:', result);
 
-      // Show success toast
-      if (typeof window !== 'undefined' && (window as any).bootstrap) {
-        const toastHtml = `
-          <div class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-              <div class="toast-body">
-                Your leave request has been submitted successfully!
-              </div>
-              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-          </div>
-        `;
-        
-        const toastContainer = document.getElementById('toast-container') || (() => {
-          const container = document.createElement('div');
-          container.id = 'toast-container';
-          container.className = 'toast-container position-fixed top-0 end-0 p-3';
-          document.body.appendChild(container);
-          return container;
-        })();
-        
-        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-        const toastElement = toastContainer.lastElementChild as HTMLElement;
-        const toast = new (window as any).bootstrap.Toast(toastElement);
-        toast.show();
-        
-        toastElement.addEventListener('hidden.bs.toast', () => {
-          toastElement.remove();
-        });
-      }
-
       // Close modal and potentially refresh the table
       setShowModal(false);
       
@@ -130,36 +105,6 @@ export default function LeavePage() {
     } catch (error: any) {
       console.error('Error submitting leave request:', error);
       
-      // Show error toast
-      if (typeof window !== 'undefined' && (window as any).bootstrap) {
-        const toastHtml = `
-          <div class="toast align-items-center text-bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-              <div class="toast-body">
-                Failed to submit leave request: ${error.message}
-              </div>
-              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-          </div>
-        `;
-        
-        const toastContainer = document.getElementById('toast-container') || (() => {
-          const container = document.createElement('div');
-          container.id = 'toast-container';
-          container.className = 'toast-container position-fixed top-0 end-0 p-3';
-          document.body.appendChild(container);
-          return container;
-        })();
-        
-        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-        const toastElement = toastContainer.lastElementChild as HTMLElement;
-        const toast = new (window as any).bootstrap.Toast(toastElement);
-        toast.show();
-        
-        toastElement.addEventListener('hidden.bs.toast', () => {
-          toastElement.remove();
-        });
-      }
       
       throw error; // Re-throw to be handled by GlobalModal
     }
@@ -201,6 +146,8 @@ export default function LeavePage() {
             onSubmit={handleLeaveSubmit}
             submitText="Submit Request"
             cancelText="Cancel"
+            successMessage="Leave request submitted successfully!"
+            errorMessage="Failed to submit leave request"
           />
         </main>
       </div>

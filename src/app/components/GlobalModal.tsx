@@ -41,6 +41,7 @@ export default function GlobalModal({
     });
     return initial;
   });
+  const [submitting, setSubmitting] = useState(false);
 
   // Reset form data when modal opens/closes
   useEffect(() => {
@@ -65,6 +66,8 @@ export default function GlobalModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return; // prevent double submit
+    setSubmitting(true);
     try {
       await onSubmit(formData);
       // Show success toast if provided
@@ -76,6 +79,8 @@ export default function GlobalModal({
       // Show error toast
       const errorMsg = errorMessage || error.message || 'An error occurred while saving';
       showErrorToast(errorMsg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -98,7 +103,7 @@ export default function GlobalModal({
                     <select
                       className="form-control"
                       value={formData[field.key]}
-                      disabled={field.disabled}
+                      disabled={field.disabled || submitting}
                       onChange={e =>
                         setFormData({ ...formData, [field.key]: e.target.value })
                       }
@@ -108,12 +113,20 @@ export default function GlobalModal({
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
+                  ) : field.type === 'textarea' ? (
+                    <textarea
+                      className="form-control"
+                      value={formData[field.key]}
+                      disabled={field.disabled || submitting}
+                      onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
+                      rows={3}
+                    />
                   ) : (
                     <input
                       type={field.type || "text"}
                       className="form-control"
                       value={formData[field.key]}
-                      disabled={field.disabled}
+                      disabled={field.disabled || submitting}
                       // If this is the start_date field and an end_date exists, clamp end_date to not be before start_date
                       onChange={e => {
                         const newVal = e.target.value;
@@ -135,8 +148,11 @@ export default function GlobalModal({
               ))}
             </div>
             <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={handleClose}>{cancelText}</button>
-              <button type="submit" className="btn btn-success">{submitText}</button>
+              <button type="button" className="btn btn-secondary" onClick={handleClose} disabled={submitting}>{cancelText}</button>
+              <button type="submit" className="btn btn-success" disabled={submitting} aria-busy={submitting}>
+                {submitting && <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>}
+                {submitText}
+              </button>
             </div>
           </div>
         </form>
