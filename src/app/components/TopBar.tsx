@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '../apiFetch';
 
@@ -26,7 +26,7 @@ export default function TopBar() {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
-  const router = useRouter();``
+  const router = useRouter();
 
   const handleLogout = () => {
   // Remove JWT cookie
@@ -40,30 +40,20 @@ export default function TopBar() {
   };
 
   const fetchUserProfile = async () => {
-    const userId = localStorage.getItem('userId');
-    console.log('Fetching profile for userId:', userId);
-    if (!userId) {
-      console.error('No userId found in localStorage');
-      return;
-    }
-    
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    if (!userId) return;
+
     setIsLoadingProfile(true);
     try {
-      const url = `/api/proxy/users/${userId}/profile`;
-      console.log('Fetching from URL:', url);
-      const response = await apiFetch(url);
-      console.log('Response status:', response.status);
-      
+      const response = await apiFetch(`/api/proxy/users/${userId}/profile`);
       if (response.ok) {
         const profile = await response.json();
-        console.log('Profile data:', profile);
         setUserProfile(profile);
       } else {
-        const errorData = await response.json();
-        console.error('Failed to fetch user profile:', errorData);
+        await response.json().catch(() => ({}));
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      // ignore for now
     } finally {
       setIsLoadingProfile(false);
     }
@@ -139,12 +129,8 @@ export default function TopBar() {
   };
 
   // Get user info from localStorage
-  let userName = '';
-  let userRole = '';
-  if (typeof window !== 'undefined') {
-    userName = localStorage.getItem('userName') || '';
-    userRole = localStorage.getItem('userRole') || '';
-  }
+  const userName = typeof window !== 'undefined' ? (localStorage.getItem('userName') || '') : '';
+  const userRole = typeof window !== 'undefined' ? (localStorage.getItem('userRole') || '') : '';
 
   // Generate initials from username
   const getUserInitials = (name: string) => {
@@ -181,67 +167,68 @@ export default function TopBar() {
 
         {/* Right side user menu */}
         <div className="d-flex align-items-center gap-3 position-relative ms-auto">
-        <div className="d-flex flex-column align-items-end me-2">
-          <span className="fw-semibold" style={{ color: '#1a237e' }}>{userName || 'User'}</span>
-          <span className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</span>
-        </div>
-        <div className="dropdown">
-          <button 
-            className="bg-secondary text-white rounded-circle border-0 d-flex align-items-center justify-content-center fw-semibold" 
-            style={{ 
-              width: 40, 
-              height: 40, 
-              fontSize: '0.875rem',
-              background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
-              border: 'none',
-              boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)'
-            }} 
-            onClick={() => setShowMenu(v => !v)}
-            title={`${userName || 'User'} Profile`}
-          >
-            <span>{userInitials}</span>
-          </button>
-          {showMenu && (
-            <ul 
-              className="dropdown-menu show" 
+          <div className="d-flex flex-column align-items-end me-2">
+            <span className="fw-semibold" style={{ color: '#1a237e' }}>{userName || 'User'}</span>
+            <span className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</span>
+          </div>
+          <div className="dropdown">
+            <button 
+              className="bg-secondary text-white rounded-circle border-0 d-flex align-items-center justify-content-center fw-semibold" 
               style={{ 
-                right: 0, 
-                left: 'auto', 
-                minWidth: 180,
-                marginTop: '8px',
-                borderRadius: '12px',
-                border: '1px solid #e0e0e0',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)'
-              }}
+                width: 40, 
+                height: 40, 
+                fontSize: '0.875rem',
+                background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
+                border: 'none',
+                boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)'
+              }} 
+              onClick={() => setShowMenu(v => !v)}
+              title={`${userName || 'User'} Profile`}
             >
-              <li className="px-3 py-2 border-bottom">
-                <div className="fw-semibold text-dark">{userName || 'User'}</div>
-                <div className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</div>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item py-2" 
-                  onClick={handleShowProfile}
-                  type="button"
-                  style={{ borderRadius: '8px' }}
-                >
-                  <i className="bi bi-person me-2"></i>Profile
-                </button>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item text-danger py-2" 
-                  onClick={handleLogout} 
-                  type="button"
-                  style={{ borderRadius: '8px' }}
-                >
-                  <i className="bi bi-box-arrow-right me-2"></i>Logout
-                </button>
-              </li>
-            </ul>
-          )}
+              <span>{userInitials}</span>
+            </button>
+            {showMenu && (
+              <ul 
+                className="dropdown-menu show" 
+                style={{ 
+                  right: 0, 
+                  left: 'auto', 
+                  minWidth: 180,
+                  marginTop: '8px',
+                  borderRadius: '12px',
+                  border: '1px solid #e0e0e0',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                <li className="px-3 py-2 border-bottom">
+                  <div className="fw-semibold text-dark">{userName || 'User'}</div>
+                  <div className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</div>
+                </li>
+                <li>
+                  <button 
+                    className="dropdown-item py-2" 
+                    onClick={handleShowProfile}
+                    type="button"
+                    style={{ borderRadius: '8px' }}
+                  >
+                    <i className="bi bi-person me-2"></i>Profile
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    className="dropdown-item text-danger py-2" 
+                    onClick={handleLogout} 
+                    type="button"
+                    style={{ borderRadius: '8px' }}
+                  >
+                    <i className="bi bi-box-arrow-right me-2"></i>Logout
+                  </button>
+                </li>
+              </ul>
+            )}
+          </div>
         </div>
-        </div>
+      </div>
 
       {/* Profile Modal */}
       {showProfileModal && (
