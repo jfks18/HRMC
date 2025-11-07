@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../apiFetch';
 import ServiceUnavailable from './ServiceUnavailable';
 
-interface LeaveBalance {
+// Raw shapes from API (snake_case)
+interface RawLeaveBalance {
   id: number;
   type: string;
   total_credits: number;
@@ -12,14 +13,32 @@ interface LeaveBalance {
   year: number;
 }
 
-interface LeaveCreditData {
-  user_id: number;
+interface RawLeaveCreditData {
+  user_id?: number | string;
+  userId?: number | string; // fallback if backend returns camelCase
+  year: number | string;
+  leave_balance?: RawLeaveBalance[];
+  leaveBalance?: RawLeaveBalance[]; // fallback if backend returns camelCase
+}
+
+// Normalized shapes used by UI (camelCase)
+interface LeaveBalance {
+  id: number;
+  type: string;
+  totalCredits: number;
+  usedDays: number;
+  remainingDays: number;
   year: number;
-  leave_balance: LeaveBalance[];
+}
+
+interface LeaveCreditData {
+  userId: number;
+  year: number;
+  leaveBalance: LeaveBalance[];
 }
 
 interface LeaveCreditCardProps {
-  userId?: string;
+  userId?: string | number;
   className?: string;
 }
 
@@ -38,7 +57,9 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
       setError(null);
 
       // Get userId from props or localStorage
-      const currentUserId = userId || localStorage.getItem('userId');
+      const currentUserId = (userId ?? (typeof window !== 'undefined' ? localStorage.getItem('userId') : ''))
+        ?.toString()
+        .trim();
       
       if (!currentUserId) {
         throw new Error('User ID not found. Please log in again.');
@@ -57,8 +78,23 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
         throw new Error(errorData.error || errorData.message || `Failed to fetch leave credits: ${response.status}`);
       }
 
-      const data = await response.json();
-      setLeaveCreditData(data);
+      const raw: RawLeaveCreditData = await response.json();
+
+      // Normalize data to camelCase and safe numbers
+      const normalized: LeaveCreditData = {
+        userId: Number(raw.user_id ?? raw.userId ?? currentUserId),
+        year: Number(raw.year ?? year),
+        leaveBalance: (raw.leave_balance ?? raw.leaveBalance ?? []).map((lb) => ({
+          id: Number(lb.id),
+          type: lb.type,
+          totalCredits: Number(lb.total_credits ?? 0),
+          usedDays: Number(lb.used_days ?? 0),
+          remainingDays: Number(lb.remaining_days ?? 0),
+          year: Number(lb.year ?? year),
+        })),
+      };
+
+      setLeaveCreditData(normalized);
       
     } catch (err: any) {
       console.error('Error fetching leave credit data:', err);
@@ -70,7 +106,15 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
   };
 
   useEffect(() => {
-    fetchLeaveCreditData(currentYear);
+    let cancelled = false;
+    // Wrap to prevent state updates after unmount
+    const run = async () => {
+      await fetchLeaveCreditData(currentYear);
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, [userId, currentYear]);
 
   if (loading) {
@@ -129,7 +173,7 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
     );
   }
 
-  if (!leaveCreditData || !leaveCreditData.leave_balance || leaveCreditData.leave_balance.length === 0) {
+  if (!leaveCreditData || !leaveCreditData.leaveBalance || leaveCreditData.leaveBalance.length === 0) {
     return (
       <div className={`card shadow-sm ${className}`}>
         <div className="card-body">
@@ -159,6 +203,7 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
   };
 
   const getProgressColor = (remaining: number, total: number) => {
+    if (!total || total <= 0) return 'secondary';
     const percentage = (remaining / total) * 100;
     if (percentage >= 70) return 'success';
     if (percentage >= 30) return 'warning';
@@ -176,9 +221,11 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
         </div>
 
         <div className="row g-2">
-          {leaveCreditData.leave_balance.map((leaveType) => {
-            const progressColor = getProgressColor(leaveType.remaining_days, leaveType.total_credits);
-            const progressPercentage = (leaveType.remaining_days / leaveType.total_credits) * 100;
+          {leaveCreditData.leaveBalance.map((leaveType) => {
+            const total = leaveType.totalCredits;
+            const remaining = leaveType.remainingDays;
+            const progressColor = getProgressColor(remaining, total);
+            const progressPercentage = total > 0 ? (remaining / total) * 100 : 0;
             
             return (
               <div key={leaveType.id} className="col-12">
@@ -188,7 +235,7 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
                       {getTypeDisplayName(leaveType.type)}
                     </small>
                     <small className="text-muted">
-                      {leaveType.remaining_days} / {leaveType.total_credits} days
+                      {remaining} / {total} days
                     </small>
                   </div>
                   
@@ -197,16 +244,16 @@ const LeaveCreditCard: React.FC<LeaveCreditCardProps> = ({
                       className={`progress-bar bg-${progressColor}`}
                       role="progressbar"
                       style={{ width: `${progressPercentage}%` }}
-                      aria-valuenow={leaveType.remaining_days}
+                      aria-valuenow={remaining}
                       aria-valuemin={0}
-                      aria-valuemax={leaveType.total_credits}
+                      aria-valuemax={total}
                     ></div>
                   </div>
                   
-                  {leaveType.used_days > 0 && (
+                  {leaveType.usedDays > 0 && (
                     <div className="mt-1">
                       <small className="text-muted">
-                        Used: {leaveType.used_days} days
+                        Used: {leaveType.usedDays} days
                       </small>
                     </div>
                   )}
