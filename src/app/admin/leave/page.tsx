@@ -61,66 +61,48 @@ export default function LeavePage() {
       const timeDifference = endDate.getTime() - startDate.getTime();
       const daysDifference = Math.ceil(timeDifference / (1000 * 3600 * 24)) + 1;
 
-      // Import apiFetch once at the top
+      // Import apiFetch only when needed
       const { apiFetch } = await import('../../apiFetch');
-      
+
       // Validate leave balance before submission
       const balanceResponse = await apiFetch(`/api/proxy/leave_balance/${userId}`);
-      
       if (balanceResponse.ok) {
         const balanceData = await balanceResponse.json();
         const leaveType = balanceData.leave_balance?.find((lb: any) => lb.type === formData.type);
-        
         if (leaveType && leaveType.remaining_days < daysDifference) {
           throw new Error(`Insufficient ${formData.type} leave balance. You have ${leaveType.remaining_days} days remaining, but requested ${daysDifference} days.`);
         }
       }
 
-        const toastHtml = `
-          <div class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-              <div class="toast-body">
-                Your leave request has been submitted successfully!
-              </div>
-      // Close modal and refresh the page to show new request
+      // Build payload
+      const leaveData = {
+        user_id: userId,
+        type: formData.type,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        days: daysDifference,
+        reason: formData.reason
+      };
+
+      // Submit request
+      const response = await apiFetch('/api/proxy/leave_request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(leaveData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: Failed to submit leave request`);
+      }
+
+      // On success: close modal and refresh to reflect new entry
       setShowModal(false);
       window.location.reload();
 
     } catch (error: any) {
       console.error('Error submitting leave request:', error);
-      
-      // Show error toast
-      if (typeof window !== 'undefined' && (window as any).bootstrap) {
-        const toastHtml = `
-          <div class="toast align-items-center text-bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-              <div class="toast-body">
-                Failed to submit leave request: ${error.message}
-              </div>
-              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-          </div>
-        `;
-        
-        const toastContainer = document.getElementById('toast-container') || (() => {
-          const container = document.createElement('div');
-          container.id = 'toast-container';
-          container.className = 'toast-container position-fixed top-0 end-0 p-3';
-          document.body.appendChild(container);
-          return container;
-        })();
-        
-        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-        const toastElement = toastContainer.lastElementChild as HTMLElement;
-        const toast = new (window as any).bootstrap.Toast(toastElement);
-        toast.show();
-        
-        toastElement.addEventListener('hidden.bs.toast', () => {
-          toastElement.remove();
-        });
-      }
-      
-      throw error; // Re-throw to be handled by GlobalModal
+      throw error; // Let GlobalModal show the error toast
     }
   };
 
