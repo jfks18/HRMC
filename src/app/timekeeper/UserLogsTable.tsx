@@ -1,38 +1,31 @@
 import React from 'react';
 
-// Format time to ensure proper display (backend already saves in Manila time)
+const PH_TZ = 'Asia/Manila';
+
+// Format time in Philippine Time. Handles TIME strings and DATETIME strings.
 function formatTime(timeString: string | null) {
   if (!timeString) return '-';
   
   try {
-    let timeToFormat: Date;
-    
-    // Handle different time string formats
+    // Full datetime string (treat as absolute instant; render in PH timezone)
     if (timeString.includes('T') || timeString.includes(' ')) {
-      // Full datetime string (e.g., "2024-11-02T14:30:00" or "2024-11-02 14:30:00")
-      timeToFormat = new Date(timeString);
-    } else if (timeString.includes(':')) {
-      // Time only string (e.g., "14:30:00")
-      // Create a date object with today's date and the provided time
-      const today = new Date().toISOString().split('T')[0]; // Get YYYY-MM-DD
-      timeToFormat = new Date(`${today}T${timeString}`);
-    } else {
-      return timeString; // Return as-is if format is unrecognized
+      const dt = new Date(timeString);
+      if (isNaN(dt.getTime())) return timeString;
+      const formatted = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PH_TZ });
+      return `${formatted} PHT`;
     }
-    
-    // Check if the date is valid
-    if (isNaN(timeToFormat.getTime())) {
-      return timeString;
+
+    // TIME-only string (assume this is wall-clock PH time already). Format without Date.
+    if (timeString.includes(':')) {
+      const parts = timeString.split(':');
+      const hour = parseInt(parts[0] || '0', 10);
+      const minute = parts[1] || '00';
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const h12 = ((hour % 12) || 12);
+      return `${h12}:${minute} ${ampm} PHT`;
     }
-    
-    // Format to 12-hour format with AM/PM
-    const formattedTime = timeToFormat.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-    
-    return `${formattedTime} PHT`;
+
+    return timeString; // Fallback
   } catch (error) {
     console.error('Error formatting time:', error, 'Original value:', timeString);
     return timeString; // Return original if parsing fails
@@ -46,7 +39,8 @@ function formatDate(dateString: string) {
       weekday: 'short',
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      timeZone: PH_TZ,
     });
   } catch (error) {
     return dateString;

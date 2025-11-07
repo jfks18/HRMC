@@ -34,6 +34,7 @@ function formatDateToWords(dateStr: string) {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    timeZone: 'Asia/Manila',
   });
 }
 

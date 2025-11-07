@@ -1145,12 +1145,12 @@ app.post('/users/:id/time-log', (req, res) => {
     if (String(user.code).trim() !== String(code).trim()) {
       return res.status(400).json({ error: 'Code does not match user' });
     }
-  // Use MySQL CURDATE() for date
-  db.query('SELECT * FROM attendance WHERE user_id = ? AND date = CURDATE()', [userId], (err2, attResults) => {
+  // Use PH date based on UTC converted to +08:00
+  db.query('SELECT * FROM attendance WHERE user_id = ? AND date = DATE(CONVERT_TZ(UTC_TIMESTAMP(), "+00:00", "+08:00"))', [userId], (err2, attResults) => {
       if (err2) return res.status(500).json({ error: 'Database query error (attendance)' });
       if (attResults.length === 0) {
         // No attendance for today, insert time_in and set date
-        db.query('INSERT INTO attendance (user_id, time_in, date, status, late_minutes) VALUES (?, CONVERT_TZ(NOW(), "+00:00", "+08:00"), CURDATE(), "Present", 0)', [userId], (err3, result3) => {
+  db.query('INSERT INTO attendance (user_id, time_in, date, status, late_minutes) VALUES (?, CONVERT_TZ(UTC_TIMESTAMP(), "+00:00", "+08:00"), DATE(CONVERT_TZ(UTC_TIMESTAMP(), "+00:00", "+08:00")), "Present", 0)', [userId], (err3, result3) => {
           if (err3) return res.status(500).json({ error: 'Database insert error', details: err3 });
           return res.status(201).json({ message: 'Time in recorded', id: result3.insertId });
         });
@@ -1163,7 +1163,7 @@ app.post('/users/:id/time-log', (req, res) => {
         }
         if (!record.time_out) {
           // Only allow time_out update, never insert new record
-          db.query('UPDATE attendance SET time_out = CONVERT_TZ(NOW(), "+00:00", "+08:00") WHERE id = ?', [record.id], (err4) => {
+          db.query('UPDATE attendance SET time_out = CONVERT_TZ(UTC_TIMESTAMP(), "+00:00", "+08:00") WHERE id = ?', [record.id], (err4) => {
             if (err4) return res.status(500).json({ error: 'Database update error', details: err4 });
             return res.json({ message: 'Time out recorded' });
           });
