@@ -1,6 +1,6 @@
 "use client";
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { apiFetch } from '../apiFetch';
 
 interface UserProfile {
@@ -27,6 +27,7 @@ export default function TopBar() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = () => {
   // Remove JWT cookie
@@ -149,6 +150,33 @@ export default function TopBar() {
   };
 
   const userInitials = getUserInitials(userName);
+
+  // Ensure any open offcanvas sidebar is closed when route changes
+  useEffect(() => {
+    const closeOffcanvasOnRouteChange = async () => {
+      if (typeof document === 'undefined') return;
+      const el = document.getElementById('mobileSideNav');
+      if (!el) return;
+      try {
+        const bootstrap = await import('bootstrap/dist/js/bootstrap.bundle.min.js');
+        const Offcanvas = (bootstrap as any).Offcanvas;
+        if (Offcanvas) {
+          const instance = Offcanvas.getInstance(el) || new Offcanvas(el);
+          instance.hide();
+        } else {
+          // Fallback: remove classes if constructor not exposed
+          el.classList.remove('show');
+          document.body.classList.remove('offcanvas-backdrop', 'show');
+        }
+      } catch {
+        // Fallback in case import fails
+        el.classList.remove('show');
+        document.body.classList.remove('offcanvas-backdrop', 'show');
+      }
+    };
+    closeOffcanvasOnRouteChange();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   return (
     <nav className="navbar navbar-expand bg-white shadow-sm px-4 py-2 align-items-center" style={{ minHeight: 64 }}>
