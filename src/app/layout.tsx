@@ -6,7 +6,7 @@ import "./globals.css";
 import "/node_modules/bootstrap/dist/css/bootstrap.min.css";
 import "/node_modules/bootstrap-icons/font/bootstrap-icons.css";
 
-import "./addBootstrap";
+import AddBootstrap from "./addBootstrap";
 
 
 const geistSans = Geist({
@@ -39,6 +39,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        {/* Load Bootstrap JS (offcanvas, modal, dropdown) */}
+        <AddBootstrap />
         {children}
       </body>
     </html>
