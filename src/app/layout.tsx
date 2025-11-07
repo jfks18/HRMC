@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -21,6 +22,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "GWC Faculty Evaluation",
   description: "HR management System for school",
+};
+
+// Ensure proper mobile scaling and responsiveness on iOS and Android
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 

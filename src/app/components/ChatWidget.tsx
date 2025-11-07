@@ -23,6 +23,7 @@ export default function ChatWidget() {
   const [connected, setConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [dms, setDms] = useState<Array<{ room: string; other: string; last_at?: string; msg_count?: number }>>([]);
+  const [unread, setUnread] = useState<Record<string, number>>({});
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const activeRoomRef = useRef<string | null>(activeRoom);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -118,7 +119,16 @@ export default function ChatWidget() {
           return next;
         });
       }
-      // update DM listing (simple refresh)
+      // if message belongs to a non-active room, increment unread count for that room
+      if (m.room && m.room !== activeRoomRef.current) {
+        setUnread(prev => {
+          const next = { ...prev };
+          next[m.room] = (next[m.room] || 0) + 1;
+          return next;
+        });
+      }
+
+      // update DM listing (simple refresh) and keep msg_count in sync
       fetchDms(client);
     });
 
@@ -156,7 +166,17 @@ export default function ChatWidget() {
       });
       if (!resp.ok) return;
       const json = await resp.json();
-      if (json && json.success && Array.isArray(json.dms)) setDms(json.dms);
+      if (json && json.success && Array.isArray(json.dms)) {
+        setDms(json.dms);
+        // seed unread map from msg_count if provided
+        const seed: Record<string, number> = {};
+        for (const dm of json.dms) {
+          try {
+            if (dm.room && typeof dm.msg_count === 'number' && dm.msg_count > 0) seed[dm.room] = dm.msg_count;
+          } catch (e) { /* ignore */ }
+        }
+        setUnread(prev => ({ ...seed, ...prev }));
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -174,6 +194,13 @@ export default function ChatWidget() {
       try { socket.emit('join', room); } catch (e) { /* ignore */ }
       setActiveRoom(room);
       setMessages([]);
+      // clear unread count for this room when opened
+      setUnread(prev => {
+        if (!prev || !prev[room]) return prev;
+        const next = { ...prev };
+        delete next[room];
+        return next;
+      });
       socket.emit('get_history', { room, limit: 200 }, (res: any) => {
         if (res && res.success && Array.isArray(res.messages)) {
           const seeded = new Set<string>(seenMessagesRef.current);
@@ -282,9 +309,15 @@ export default function ChatWidget() {
               <ul className="list-group">
                 {dms.map(dm => (
                   <li key={dm.room} className={`list-group-item list-group-item-action ${dm.room === activeRoom ? 'active' : ''}`} onClick={() => openRoom(dm.room)} style={{ cursor: 'pointer' }}>
-                    <div className="d-flex justify-content-between">
+                    <div className="d-flex justify-content-between align-items-center">
                       <div>{dm.other}</div>
-                      <small className="text-muted">{dm.msg_count}</small>
+                      <div style={{ minWidth: 28, display: 'flex', justifyContent: 'flex-end' }}>
+                        {unread[dm.room] > 0 ? (
+                          <span className="badge bg-danger" title={`${unread[dm.room]} unread`} style={{ borderRadius: 12, minWidth: 20, padding: '0.25rem 0.5rem' }}>{unread[dm.room]}</span>
+                        ) : (
+                          <small className="text-muted">{dm.msg_count ? dm.msg_count : ''}</small>
+                        )}
+                      </div>
                     </div>
                   </li>
                 ))}

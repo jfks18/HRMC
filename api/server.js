@@ -772,15 +772,16 @@ app.get('/roles/:id', authenticateToken, (req, res) => {
  * Returns: Success message and inserted record id
  */
 app.post('/leave_request', (req, res) => {
-  const { user_id, type, start_date, end_date, reason} = req.body;
+  const { user_id, type, start_date, end_date, reason } = req.body;
   if (!user_id || !type || !start_date || !end_date || !reason) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   const sql = `INSERT INTO leave_request (user_id, type, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)`;
   const values = [user_id, type, start_date, end_date, reason];
-  db.promise().query(sql, values, (err, result) => {
+  // Use callback-based query here to avoid dangling promises causing timeouts
+  db.query(sql, values, (err, result) => {
     if (err) {
-      return res.status(500).json({ error: 'Database insert error', details: err });
+      return res.status(500).json({ error: 'Database insert error', details: err && err.message ? err.message : err });
     }
     res.status(201).json({ message: 'Leave request created', id: result.insertId });
   });

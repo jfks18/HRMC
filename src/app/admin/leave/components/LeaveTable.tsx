@@ -357,7 +357,6 @@ export default function LeaveTable() {
   };
 
   const columns: TableColumn<LeaveRequest>[] = [
-    { key: 'id', header: 'Request ID' },
   { key: 'employee_name', header: 'Employee' },
     { 
       key: 'type', 

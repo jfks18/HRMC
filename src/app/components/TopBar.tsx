@@ -165,8 +165,22 @@ export default function TopBar() {
   const userInitials = getUserInitials(userName);
 
   return (
-    <nav className="navbar navbar-expand bg-white shadow-sm px-4 py-2 align-items-center justify-content-end" style={{ minHeight: 64 }}>
-      <div className="d-flex align-items-center gap-3 position-relative">
+    <nav className="navbar navbar-expand bg-white shadow-sm px-4 py-2 align-items-center" style={{ minHeight: 64 }}>
+      <div className="d-flex align-items-center w-100">
+        {/* Mobile menu toggle (visible on < md) */}
+        <button
+          className="btn btn-link d-md-none me-auto"
+          type="button"
+          data-bs-toggle="offcanvas"
+          data-bs-target="#mobileSideNav"
+          aria-controls="mobileSideNav"
+          title="Open menu"
+        >
+          <i className="bi bi-list" style={{ fontSize: '1.5rem', color: '#1a237e' }}></i>
+        </button>
+
+        {/* Right side user menu */}
+        <div className="d-flex align-items-center gap-3 position-relative ms-auto">
         <div className="d-flex flex-column align-items-end me-2">
           <span className="fw-semibold" style={{ color: '#1a237e' }}>{userName || 'User'}</span>
           <span className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</span>
@@ -227,7 +241,7 @@ export default function TopBar() {
             </ul>
           )}
         </div>
-      </div>
+        </div>
 
       {/* Profile Modal */}
       {showProfileModal && (

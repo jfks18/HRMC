@@ -3,7 +3,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const navItems = [
+export const navItems = [
   { label: 'Dashboard', icon: 'bi-grid', href: '/admin/dashboard' },
   { label: 'User Management', icon: 'bi-people', href: '/admin/users' },
   { label: 'Student Management', icon: 'bi-person-badge', href: '/admin/students' },
@@ -40,54 +40,108 @@ export default function SideNav() {
   const userInitials = getUserInitials(userName);
   
   return (
-    <aside className="d-flex flex-column bg-white shadow-sm p-3" style={{ width: 260, minHeight: '100vh' }}>
-      <div className="mb-4 d-flex align-items-center gap-2">
-        <img src="/gwclogo.png" alt="HRMS Logo" width={36} height={36} />
-        <div>
-          <div className="fw-bold fs-5" style={{ color: '#1a237e' }}>GWC HRMS</div>
-          <div className="text-muted small">Management System</div>
+    <>
+      {/* Desktop / tablet sidebar (md and up) */}
+      <aside className="d-none d-md-flex flex-column bg-white shadow-sm p-3" style={{ width: 260, minHeight: '100vh' }}>
+        <div className="mb-4 d-flex align-items-center gap-2">
+          <img src="/gwclogo.png" alt="HRMS Logo" width={36} height={36} />
+          <div>
+            <div className="fw-bold fs-5" style={{ color: '#1a237e' }}>GWC HRMS</div>
+            <div className="text-muted small">Management System</div>
+          </div>
+        </div>
+        <ul className="nav nav-pills flex-column mb-auto">
+          {navItems.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <li className="nav-item mb-1" key={item.label}>
+                <Link
+                  href={item.href}
+                  className={`nav-link d-flex align-items-center gap-2 ${isActive ? 'active' : 'text-secondary'}`}
+                  style={{
+                    background: isActive ? '#e3e8ff' : 'none',
+                    color: isActive ? '#1a237e' : '#495057',
+                    fontWeight: isActive ? 600 : 400,
+                    borderRadius: 8,
+                    transition: 'background 0.2s, color 0.2s',
+                  }}
+                >
+                  <i className={`bi ${item.icon} fs-5`}></i>
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-auto d-flex align-items-center gap-2 p-2 rounded bg-light">
+          <div 
+            className="text-white rounded-circle d-flex align-items-center justify-content-center fw-semibold" 
+            style={{ 
+              width: 36, 
+              height: 36,
+              background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
+              fontSize: '0.875rem'
+            }}
+          >
+            <span>{userInitials}</span>
+          </div>
+          <div>
+            <div className="fw-semibold" style={{ color: '#1a237e' }}>{userName || 'User'}</div>
+            <div className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile offcanvas sidebar (always in DOM) */}
+      <div className="offcanvas offcanvas-start" tabIndex={-1} id="mobileSideNav" aria-labelledby="mobileSideNavLabel">
+        <div className="offcanvas-header">
+          <h5 className="offcanvas-title" id="mobileSideNavLabel">GWC HRMS</h5>
+          <button type="button" className="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div className="offcanvas-body d-flex flex-column p-3">
+          <ul className="nav nav-pills flex-column mb-auto">
+            {navItems.map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <li className="nav-item mb-1" key={item.label}>
+                  <Link
+                    href={item.href}
+                    className={`nav-link d-flex align-items-center gap-2 ${isActive ? 'active' : 'text-secondary'}`}
+                    data-bs-dismiss="offcanvas"
+                    style={{
+                      background: isActive ? '#e3e8ff' : 'none',
+                      color: isActive ? '#1a237e' : '#495057',
+                      fontWeight: isActive ? 600 : 400,
+                      borderRadius: 8,
+                      transition: 'background 0.2s, color 0.2s',
+                    }}
+                  >
+                    <i className={`bi ${item.icon} fs-5`}></i>
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-auto d-flex align-items-center gap-2 p-2 rounded bg-light">
+            <div 
+              className="text-white rounded-circle d-flex align-items-center justify-content-center fw-semibold" 
+              style={{ 
+                width: 36, 
+                height: 36,
+                background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
+                fontSize: '0.875rem'
+              }}
+            >
+              <span>{userInitials}</span>
+            </div>
+            <div>
+              <div className="fw-semibold" style={{ color: '#1a237e' }}>{userName || 'User'}</div>
+              <div className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</div>
+            </div>
+          </div>
         </div>
       </div>
-      <ul className="nav nav-pills flex-column mb-auto">
-        {navItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
-          return (
-            <li className="nav-item mb-1" key={item.label}>
-              <Link
-                href={item.href}
-                className={`nav-link d-flex align-items-center gap-2 ${isActive ? 'active' : 'text-secondary'}`}
-                style={{
-                  background: isActive ? '#e3e8ff' : 'none',
-                  color: isActive ? '#1a237e' : '#495057',
-                  fontWeight: isActive ? 600 : 400,
-                  borderRadius: 8,
-                  transition: 'background 0.2s, color 0.2s',
-                }}
-              >
-                <i className={`bi ${item.icon} fs-5`}></i>
-                {item.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="mt-auto d-flex align-items-center gap-2 p-2 rounded bg-light">
-        <div 
-          className="text-white rounded-circle d-flex align-items-center justify-content-center fw-semibold" 
-          style={{ 
-            width: 36, 
-            height: 36,
-            background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
-            fontSize: '0.875rem'
-          }}
-        >
-          <span>{userInitials}</span>
-        </div>
-        <div>
-          <div className="fw-semibold" style={{ color: '#1a237e' }}>{userName || 'User'}</div>
-          <div className="text-muted small">{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Role'}</div>
-        </div>
-      </div>
-    </aside>
+    </>
   );
 }
