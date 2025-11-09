@@ -359,9 +359,8 @@ export default function LeaveTable() {
       <div>
         <div className="fw-semibold">{(row as any).user_name || (row as any).employee_name || String(row.user_id)}</div>
         <div className="text-muted small">
-          ID: {row.user_id}
           {(row as any).role_name && (
-            <span className="badge bg-light text-dark ms-1">{(row as any).role_name}</span>
+            <span className="badge bg-light text-dark">{(row as any).role_name}</span>
           )}
         </div>
       </div>

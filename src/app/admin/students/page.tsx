@@ -353,7 +353,6 @@ export default function StudentsPage() {
               <table className="table table-hover">
                 <thead className="table-light">
                   <tr>
-                    <th>Student ID</th>
                     <th>Name</th>
                     <th>Year</th>
                     <th>Course</th>
@@ -363,9 +362,6 @@ export default function StudentsPage() {
                 <tbody>
                   {filteredStudents.map((student) => (
                     <tr key={student.id}>
-                      <td>
-                        <code className="bg-light px-2 py-1 rounded">{student.id}</code>
-                      </td>
                       <td className="fw-semibold">{student.name}</td>
                       <td>
                         <span className="badge bg-info text-dark">{student.year}</span>

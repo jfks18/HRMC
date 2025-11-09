@@ -38,7 +38,6 @@ export default function FacultyEvaluationTable() {
   
   // Define columns using useMemo to ensure proper scope
   const columns = useMemo((): TableColumn<EvaluationRecord>[] => [
-    { key: 'id', header: 'Evaluation ID' },
     {
       key: 'teacher_id',
       header: 'Teacher Name',

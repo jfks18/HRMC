@@ -53,7 +53,7 @@ function getStatusBadge(status: string) {
 }
 
 const columns: TableColumn<AttendanceRecord>[] = [
-  { key: 'user_name' as keyof AttendanceRecord, header: 'Name', render: (_v, row) => (row.user_name || String(row.user_id)) },
+  { key: 'user_name' as keyof AttendanceRecord, header: 'Name', render: (_v, row) => (row.user_name || 'N/A') },
   { 
     key: 'date', 
     header: 'Date', 

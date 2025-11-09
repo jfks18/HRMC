@@ -314,7 +314,7 @@ export default function LeaveTable() {
 
   // Filter
   const filteredLeaveRequests = leaveRequests.filter(request => {
-    const matchesSearch = request.type.toLowerCase().includes(search.toLowerCase()) || request.reason.toLowerCase().includes(search.toLowerCase()) || request.id.toString().includes(search);
+    const matchesSearch = request.type.toLowerCase().includes(search.toLowerCase()) || request.reason.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = !filter ? true : getDisplayStatus(request).toLowerCase() === filter.toLowerCase();
     return matchesSearch && matchesFilter;
   });
