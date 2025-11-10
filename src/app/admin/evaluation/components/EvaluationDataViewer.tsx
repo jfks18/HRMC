@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
 
 interface EvaluationAnswer {
   id: number;
@@ -226,6 +227,61 @@ export default function EvaluationDataViewer({
     (evaluationData.overall_average ?? calculateAverageRating(questionsForDisplay))
   );
 
+  const exportToPDF = async () => {
+    try {
+      console.log('🚀 Starting Admin PDF export...');
+      
+      const pdf = new jsPDF();
+      
+      // Header
+      pdf.text('FACULTY EVALUATION REPORT', 20, 20);
+      pdf.text(`Teacher: ${evaluationData.teacher_name || teacherId}`, 20, 30);
+      pdf.text(`Overall Rating: ${averageRating.toFixed(1)}/5.0`, 20, 40);
+      pdf.text(`Total Students: ${evaluationData.total_students}`, 20, 50);
+      pdf.text(`Status: ${evaluationData.status}`, 20, 60);
+      
+      // Questions
+      let yPos = 80;
+      questionsForDisplay.forEach((question, index) => {
+        if (yPos > 250) {
+          pdf.addPage();
+          yPos = 20;
+        }
+        
+        const questionText = `Q${index + 1}: ${question.question_text}`;
+        const lines = pdf.splitTextToSize(questionText, 170);
+        pdf.text(lines, 20, yPos);
+        yPos += lines.length * 5 + 5;
+        
+        pdf.text(`Rating: ${Number(question.average_rating ?? 0).toFixed(1)}/5.0 (${question.total_responses} responses)`, 25, yPos);
+        yPos += 10;
+        
+        // Rating breakdown
+        if (question.ratings_breakdown) {
+          const breakdown = [5, 4, 3, 2, 1].map(rating => {
+            const count = (question.ratings_breakdown as any)[rating] || 0;
+            const percentage = question.total_responses > 0 ? (count / question.total_responses * 100).toFixed(0) : 0;
+            return `${rating}★: ${count} (${percentage}%)`;
+          }).join(' | ');
+          
+          const breakdownLines = pdf.splitTextToSize(breakdown, 170);
+          pdf.text(breakdownLines, 25, yPos);
+          yPos += breakdownLines.length * 4 + 15;
+        } else {
+          yPos += 10;
+        }
+      });
+      
+      const filename = `admin_evaluation_${evaluationData.evaluation_id}_${Date.now()}.pdf`;
+      pdf.save(filename);
+      console.log('✅ Admin PDF export completed!');
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert(`Error generating PDF: ${error.message}`);
+    }
+  };
+
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="modal-dialog modal-xl">
@@ -236,9 +292,9 @@ export default function EvaluationDataViewer({
               <h5 className="modal-title text-white fw-bold mb-1">Evaluation Data Viewer</h5>
               <div className="text-white-50">
                 {evaluationData.teacher_name ? (
-                  <>Teacher: {evaluationData.teacher_name} (ID: {teacherId})</>
+                  <>Teacher: {evaluationData.teacher_name}</>
                 ) : (
-                  <>Teacher ID: {teacherId}</>
+                  <>Teacher: {teacherId}</>
                 )} | Total Students: {evaluationData.total_students}
               </div>
             </div>
@@ -267,10 +323,6 @@ export default function EvaluationDataViewer({
                   <div className="card-body">
                     <h6 className="text-muted mb-3">Evaluation Details</h6>
                     <div className="row g-2">
-                      <div className="col-12">
-                        <small className="text-muted">Evaluation ID:</small>
-                        <div className="fw-medium">{evaluationData.evaluation_id}</div>
-                      </div>
                       <div className="col-12">
                         <small className="text-muted">Status:</small>
                         <div>
@@ -364,45 +416,62 @@ export default function EvaluationDataViewer({
               <i className="bi bi-chat-dots me-2"></i>
               View Comments
             </button>
-            <button 
-              type="button" 
-              className="btn btn-primary"
-              onClick={() => {
-                // Export evaluation data as JSON
-                const exportData = {
-                  evaluation_id: evaluationData.evaluation_id,
-                  teacher_id: evaluationData.teacher_id,
-                  teacher_name: evaluationData.teacher_name,
-                  created_at: evaluationData.created_at,
-                  expires_at: evaluationData.expires_at,
-                  status: evaluationData.status,
-                  overall_average: evaluationData.overall_average,
-                  total_students: evaluationData.total_students,
-                  total_questions: evaluationData.questions.length,
-                  questions: evaluationData.questions.map(question => ({
-                    question_id: question.question_id,
-                    question: question.question_text,
-                    average_rating: question.average_rating,
-                    total_responses: question.total_responses,
-                    ratings_breakdown: question.ratings_breakdown
-                  }))
-                };
-                
-                const dataStr = JSON.stringify(exportData, null, 2);
-                const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `evaluation_${evaluationData.evaluation_id}_summary.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-              }}
-            >
-              <i className="bi bi-download me-2"></i>
-              Export Data
-            </button>
+            <div className="d-flex gap-2">
+              <button 
+                type="button" 
+                className="btn btn-danger"
+                onClick={() => {
+                  console.log('🔴 Admin PDF Export clicked!');
+                  exportToPDF();
+                }}
+                title="Export as PDF Report"
+              >
+                <i className="bi bi-file-earmark-pdf me-2"></i>
+                📄 Export PDF
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-warning"
+                onClick={() => {
+                  console.log('🟡 Admin JSON Export clicked!');
+                  
+                  // Export evaluation data as JSON
+                  const exportData = {
+                    evaluation_id: evaluationData.evaluation_id,
+                    teacher_id: evaluationData.teacher_id,
+                    teacher_name: evaluationData.teacher_name,
+                    created_at: evaluationData.created_at,
+                    expires_at: evaluationData.expires_at,
+                    status: evaluationData.status,
+                    overall_average: evaluationData.overall_average,
+                    total_students: evaluationData.total_students,
+                    total_questions: evaluationData.questions.length,
+                    questions: evaluationData.questions.map(question => ({
+                      question_id: question.question_id,
+                      question: question.question_text,
+                      average_rating: question.average_rating,
+                      total_responses: question.total_responses,
+                      ratings_breakdown: question.ratings_breakdown
+                    }))
+                  };
+                  
+                  const dataStr = JSON.stringify(exportData, null, 2);
+                  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                  const url = URL.createObjectURL(dataBlob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `evaluation_${evaluationData.evaluation_id}_summary.json`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                }}
+                title="Export as JSON Data"
+              >
+                <i className="bi bi-code me-2"></i>
+                📊 Export JSON
+              </button>
+            </div>
           </div>
         </div>
       </div>

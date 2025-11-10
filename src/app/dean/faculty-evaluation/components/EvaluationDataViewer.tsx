@@ -221,103 +221,40 @@ export default function EvaluationDataViewer({
 
   const exportToPDF = async () => {
     try {
-      // Create a printable version of the evaluation data
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let yPosition = 20;
+      console.log('🚀 Starting PDF export...');
+      console.log('📊 Evaluation data available:', !!evaluationData);
       
-      // Header
-      pdf.setFontSize(20);
-      pdf.setTextColor(25, 118, 210); // Primary blue color
-      pdf.text('Faculty Evaluation Report', 20, yPosition);
-      yPosition += 10;
+      // Simple test first
+      const pdf = new jsPDF();
       
-      pdf.setFontSize(12);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, yPosition);
-      yPosition += 15;
+      // Test basic PDF creation
+      pdf.text('EVALUATION REPORT - TEST', 20, 20);
+      pdf.text(`Teacher: ${evaluationData.teacher_name || 'Unknown'}`, 20, 30);
+      pdf.text(`Overall Rating: ${evaluationData.overall_average || 'N/A'}`, 20, 40);
+      pdf.text(`Total Students: ${evaluationData.total_students || 0}`, 20, 50);
       
-      // Evaluation Details
-      pdf.setFontSize(16);
-      pdf.setTextColor(25, 118, 210);
-      pdf.text('Evaluation Details', 20, yPosition);
-      yPosition += 8;
-      
-      pdf.setFontSize(11);
-      pdf.setTextColor(0, 0, 0);
-      const details = [
-        `Teacher: ${evaluationData.teacher_name || `ID: ${teacherId}`}`,
-        `Evaluation ID: ${evaluationData.evaluation_id}`,
-        `Status: ${evaluationData.status}`,
-        `Total Students Responded: ${evaluationData.total_students}`,
-        `Overall Rating: ${averageRating.toFixed(1)}/5.0`,
-        `Created: ${formatDate(evaluationData.created_at)}`,
-        `Expires: ${formatDate(evaluationData.expires_at)}`
-      ];
-      
-      details.forEach(detail => {
-        if (yPosition > pageHeight - 20) {
-          pdf.addPage();
-          yPosition = 20;
-        }
-        pdf.text(detail, 25, yPosition);
-        yPosition += 6;
-      });
-      
-      yPosition += 10;
-      
-      // Questions and Ratings
-      pdf.setFontSize(16);
-      pdf.setTextColor(25, 118, 210);
-      
-      if (yPosition > pageHeight - 20) {
-        pdf.addPage();
-        yPosition = 20;
-      }
-      
-      pdf.text('Question Analysis', 20, yPosition);
-      yPosition += 10;
-      
+      // Add questions
+      let yPos = 70;
       evaluationData.questions.forEach((question, index) => {
-        // Check if we need a new page
-        if (yPosition > pageHeight - 50) {
+        if (yPos > 250) {
           pdf.addPage();
-          yPosition = 20;
+          yPos = 20;
         }
         
-        // Question header
-        pdf.setFontSize(12);
-        pdf.setTextColor(0, 0, 0);
-        const questionText = `${index + 1}. ${question.question_text}`;
-        const splitText = pdf.splitTextToSize(questionText, pageWidth - 40);
-        pdf.text(splitText, 25, yPosition);
-        yPosition += splitText.length * 5 + 3;
-        
-        // Rating info
-        pdf.setFontSize(10);
-        pdf.text(`Average Rating: ${question.average_rating.toFixed(1)}/5.0 (${question.total_responses} responses)`, 30, yPosition);
-        yPosition += 5;
-        
-        // Rating breakdown
-        const ratingBreakdown = [5, 4, 3, 2, 1].map(rating => {
-          const count = question.ratings_breakdown[rating] || 0;
-          const percentage = question.total_responses > 0 ? (count / question.total_responses * 100).toFixed(0) : 0;
-          return `${rating}★: ${count} (${percentage}%)`;
-        }).join(' | ');
-        
-        const splitBreakdown = pdf.splitTextToSize(ratingBreakdown, pageWidth - 40);
-        pdf.text(splitBreakdown, 30, yPosition);
-        yPosition += splitBreakdown.length * 4 + 8;
+        pdf.text(`Q${index + 1}: ${question.question_text}`, 20, yPos);
+        pdf.text(`Rating: ${question.average_rating.toFixed(1)}/5`, 25, yPos + 10);
+        yPos += 25;
       });
       
-      // Save the PDF
-      const filename = `evaluation_report_${evaluationData.evaluation_id}_${new Date().getTime()}.pdf`;
+      const filename = `evaluation_${evaluationData.evaluation_id}_${Date.now()}.pdf`;
+      console.log('💾 Saving PDF as:', filename);
+      
       pdf.save(filename);
+      console.log('✅ PDF export completed successfully!');
       
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Error generating PDF. Please try again.');
+      alert(`Error generating PDF: ${error.message}. Please check the console for more details.`);
     }
   };
 
@@ -449,17 +386,23 @@ export default function EvaluationDataViewer({
             <div className="d-flex gap-2">
               <button 
                 type="button" 
-                className="btn btn-success"
-                onClick={exportToPDF}
+                className="btn btn-danger"
+                onClick={() => {
+                  console.log('🔴 PDF Export button clicked!');
+                  console.log('Evaluation data:', evaluationData);
+                  exportToPDF();
+                }}
                 title="Export as PDF Report"
               >
                 <i className="bi bi-file-earmark-pdf me-2"></i>
-                Export PDF
+                📄 Export PDF
               </button>
               <button 
                 type="button" 
-                className="btn btn-primary"
+                className="btn btn-warning"
                 onClick={() => {
+                  console.log('🟡 JSON Export button clicked!');
+                  
                   // Export evaluation data as JSON
                   const exportData = {
                     evaluation_id: evaluationData.evaluation_id,
@@ -493,8 +436,8 @@ export default function EvaluationDataViewer({
                 }}
                 title="Export as JSON Data"
               >
-                <i className="bi bi-download me-2"></i>
-                Export JSON
+                <i className="bi bi-code me-2"></i>
+                📊 Export JSON
               </button>
             </div>
           </div>
