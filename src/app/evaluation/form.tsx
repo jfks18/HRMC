@@ -202,17 +202,9 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 			<div style={{ background: "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "32px 32px 16px 32px" }}>
 				<h2 style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: "2rem", letterSpacing: 1 }}>Professor Evaluation</h2>
 				<p style={{ color: "#e3f2fd", fontWeight: 500, marginTop: 8, fontSize: "1.1rem" }}>Please rate your professor's teaching performance.</p>
-				<div style={{ color: "#fff", fontWeight: 600, fontSize: "1.08rem", marginTop: 10, background: "#1976d2", padding: "6px 18px", borderRadius: 8, display: "inline-block" }}>
-					Student ID: {studentId}
-				</div>
 				{teacherName && (
 					<div style={{ color: "#fff", fontWeight: 600, fontSize: "1.08rem", marginTop: 10, background: "#1976d2", padding: "6px 18px", borderRadius: 8, display: "inline-block" }}>
-						Teacher Name: {teacherName}
-					</div>
-				)}
-				{evaluationId && (
-					<div style={{ color: "#fff", fontWeight: 600, fontSize: "1.08rem", marginTop: 10, background: "#1976d2", padding: "6px 18px", borderRadius: 8, display: "inline-block" }}>
-						Evaluation ID: {evaluationId}
+						Teacher: {teacherName}
 					</div>
 				)}
 			</div>
@@ -256,7 +248,7 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 										const isIncomplete = incomplete.includes(idx);
 										return (
 											<div key={q.id} style={{ marginBottom: 24, padding: "16px 18px", background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(44,62,80,0.07)", border: isIncomplete ? "2px solid #e53935" : (isAnswered(idx) ? "2px solid #90caf9" : "2px solid #eceff1") }}>
-												<label style={{ fontWeight: 700, color: "#263238", marginBottom: 10, display: "block", fontSize: "1.08rem" }}>{q.id}. {q.text}</label>
+												<label style={{ fontWeight: 700, color: "#263238", marginBottom: 10, display: "block", fontSize: "1.08rem" }}>{q.text}</label>
 												{q.id === 21 || q.id === 22 || q.id === 23 ? (
 													<>
 														<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>

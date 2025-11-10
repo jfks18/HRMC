@@ -160,7 +160,6 @@ export default function FacultyEvaluationTable() {
 
   const filteredRecords = records.filter(record => {
     const matchesSearch =
-      record.id.toString().includes(search) ||
       (teacherNames[record.teacher_id] || record.teacher_id).toLowerCase().includes(search.toLowerCase()) ||
       record.password.toLowerCase().includes(search.toLowerCase());
 
@@ -190,9 +189,6 @@ export default function FacultyEvaluationTable() {
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h5 className="card-title mb-0">Faculty Evaluations</h5>
-            <div className="text-muted small">
-              User ID: {userId}
-            </div>
           </div>
           
           {error && (

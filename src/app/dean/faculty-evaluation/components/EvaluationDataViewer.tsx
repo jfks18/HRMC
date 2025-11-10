@@ -1,5 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface EvaluationAnswer {
   id: number;
@@ -217,6 +219,108 @@ export default function EvaluationDataViewer({
 
   const averageRating = evaluationData.overall_average || calculateAverageRating(evaluationData.questions);
 
+  const exportToPDF = async () => {
+    try {
+      // Create a printable version of the evaluation data
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      let yPosition = 20;
+      
+      // Header
+      pdf.setFontSize(20);
+      pdf.setTextColor(25, 118, 210); // Primary blue color
+      pdf.text('Faculty Evaluation Report', 20, yPosition);
+      yPosition += 10;
+      
+      pdf.setFontSize(12);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, yPosition);
+      yPosition += 15;
+      
+      // Evaluation Details
+      pdf.setFontSize(16);
+      pdf.setTextColor(25, 118, 210);
+      pdf.text('Evaluation Details', 20, yPosition);
+      yPosition += 8;
+      
+      pdf.setFontSize(11);
+      pdf.setTextColor(0, 0, 0);
+      const details = [
+        `Teacher: ${evaluationData.teacher_name || `ID: ${teacherId}`}`,
+        `Evaluation ID: ${evaluationData.evaluation_id}`,
+        `Status: ${evaluationData.status}`,
+        `Total Students Responded: ${evaluationData.total_students}`,
+        `Overall Rating: ${averageRating.toFixed(1)}/5.0`,
+        `Created: ${formatDate(evaluationData.created_at)}`,
+        `Expires: ${formatDate(evaluationData.expires_at)}`
+      ];
+      
+      details.forEach(detail => {
+        if (yPosition > pageHeight - 20) {
+          pdf.addPage();
+          yPosition = 20;
+        }
+        pdf.text(detail, 25, yPosition);
+        yPosition += 6;
+      });
+      
+      yPosition += 10;
+      
+      // Questions and Ratings
+      pdf.setFontSize(16);
+      pdf.setTextColor(25, 118, 210);
+      
+      if (yPosition > pageHeight - 20) {
+        pdf.addPage();
+        yPosition = 20;
+      }
+      
+      pdf.text('Question Analysis', 20, yPosition);
+      yPosition += 10;
+      
+      evaluationData.questions.forEach((question, index) => {
+        // Check if we need a new page
+        if (yPosition > pageHeight - 50) {
+          pdf.addPage();
+          yPosition = 20;
+        }
+        
+        // Question header
+        pdf.setFontSize(12);
+        pdf.setTextColor(0, 0, 0);
+        const questionText = `${index + 1}. ${question.question_text}`;
+        const splitText = pdf.splitTextToSize(questionText, pageWidth - 40);
+        pdf.text(splitText, 25, yPosition);
+        yPosition += splitText.length * 5 + 3;
+        
+        // Rating info
+        pdf.setFontSize(10);
+        pdf.text(`Average Rating: ${question.average_rating.toFixed(1)}/5.0 (${question.total_responses} responses)`, 30, yPosition);
+        yPosition += 5;
+        
+        // Rating breakdown
+        const ratingBreakdown = [5, 4, 3, 2, 1].map(rating => {
+          const count = question.ratings_breakdown[rating] || 0;
+          const percentage = question.total_responses > 0 ? (count / question.total_responses * 100).toFixed(0) : 0;
+          return `${rating}★: ${count} (${percentage}%)`;
+        }).join(' | ');
+        
+        const splitBreakdown = pdf.splitTextToSize(ratingBreakdown, pageWidth - 40);
+        pdf.text(splitBreakdown, 30, yPosition);
+        yPosition += splitBreakdown.length * 4 + 8;
+      });
+      
+      // Save the PDF
+      const filename = `evaluation_report_${evaluationData.evaluation_id}_${new Date().getTime()}.pdf`;
+      pdf.save(filename);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF. Please try again.');
+    }
+  };
+
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="modal-dialog modal-xl">
@@ -227,9 +331,9 @@ export default function EvaluationDataViewer({
               <h5 className="modal-title text-white fw-bold mb-1">Evaluation Data Viewer - Dean View</h5>
               <div className="text-white-50">
                 {evaluationData.teacher_name ? (
-                  <>Teacher: {evaluationData.teacher_name} (ID: {teacherId})</>
+                  <>Teacher: {evaluationData.teacher_name}</>
                 ) : (
-                  <>Teacher ID: {teacherId}</>
+                  <>Teacher: {teacherId}</>
                 )} | Total Students: {evaluationData.total_students}
               </div>
             </div>
@@ -258,10 +362,6 @@ export default function EvaluationDataViewer({
                   <div className="card-body">
                     <h6 className="text-muted mb-3">Evaluation Details</h6>
                     <div className="row g-2">
-                      <div className="col-12">
-                        <small className="text-muted">Evaluation ID:</small>
-                        <div className="fw-medium">{evaluationData.evaluation_id}</div>
-                      </div>
                       <div className="col-12">
                         <small className="text-muted">Status:</small>
                         <div>
@@ -346,45 +446,57 @@ export default function EvaluationDataViewer({
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Close
             </button>
-            <button 
-              type="button" 
-              className="btn btn-primary"
-              onClick={() => {
-                // Export evaluation data as JSON
-                const exportData = {
-                  evaluation_id: evaluationData.evaluation_id,
-                  teacher_id: evaluationData.teacher_id,
-                  teacher_name: evaluationData.teacher_name,
-                  created_at: evaluationData.created_at,
-                  expires_at: evaluationData.expires_at,
-                  status: evaluationData.status,
-                  overall_average: evaluationData.overall_average,
-                  total_students: evaluationData.total_students,
-                  total_questions: evaluationData.questions.length,
-                  questions: evaluationData.questions.map(question => ({
-                    question_id: question.question_id,
-                    question: question.question_text,
-                    average_rating: question.average_rating,
-                    total_responses: question.total_responses,
-                    ratings_breakdown: question.ratings_breakdown
-                  }))
-                };
-                
-                const dataStr = JSON.stringify(exportData, null, 2);
-                const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `evaluation_${evaluationData.evaluation_id}_dean_summary.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-              }}
-            >
-              <i className="bi bi-download me-2"></i>
-              Export Data
-            </button>
+            <div className="d-flex gap-2">
+              <button 
+                type="button" 
+                className="btn btn-success"
+                onClick={exportToPDF}
+                title="Export as PDF Report"
+              >
+                <i className="bi bi-file-earmark-pdf me-2"></i>
+                Export PDF
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary"
+                onClick={() => {
+                  // Export evaluation data as JSON
+                  const exportData = {
+                    evaluation_id: evaluationData.evaluation_id,
+                    teacher_id: evaluationData.teacher_id,
+                    teacher_name: evaluationData.teacher_name,
+                    created_at: evaluationData.created_at,
+                    expires_at: evaluationData.expires_at,
+                    status: evaluationData.status,
+                    overall_average: evaluationData.overall_average,
+                    total_students: evaluationData.total_students,
+                    total_questions: evaluationData.questions.length,
+                    questions: evaluationData.questions.map(question => ({
+                      question_id: question.question_id,
+                      question: question.question_text,
+                      average_rating: question.average_rating,
+                      total_responses: question.total_responses,
+                      ratings_breakdown: question.ratings_breakdown
+                    }))
+                  };
+                  
+                  const dataStr = JSON.stringify(exportData, null, 2);
+                  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                  const url = URL.createObjectURL(dataBlob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `evaluation_${evaluationData.evaluation_id}_dean_summary.json`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                }}
+                title="Export as JSON Data"
+              >
+                <i className="bi bi-download me-2"></i>
+                Export JSON
+              </button>
+            </div>
           </div>
         </div>
       </div>
