@@ -221,196 +221,80 @@ export default function EvaluationDataViewer({
 
   const exportToPDF = async () => {
     try {
-      console.log('🚀 Starting Enhanced PDF export...');
+      console.log('🚀 Starting Simple PDF export...');
+      console.log('📊 Evaluation data:', evaluationData);
       
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let yPos = 20;
-      
-      // Colors - defined as tuples for proper TypeScript typing
-      const primaryBlue: [number, number, number] = [25, 118, 210];
-      const lightBlue: [number, number, number] = [144, 202, 249];
-      const darkGray: [number, number, number] = [66, 66, 66];
-      const lightGray: [number, number, number] = [245, 245, 245];
-      const successGreen: [number, number, number] = [76, 175, 80];
-      const warningOrange: [number, number, number] = [255, 152, 0];
-      const errorRed: [number, number, number] = [244, 67, 54];
-      
-      // Header Section with Background
-      pdf.setFillColor(...primaryBlue);
-      pdf.rect(0, 0, pageWidth, 35, 'F');
-      
-      // Title
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(20);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Faculty Evaluation Report - Dean View', 20, 18);
-      
-      // Subtitle
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Generated on ${new Date().toLocaleDateString('en-US', { 
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
-      })}`, 20, 28);
-      
-      yPos = 50;
-      
-      // Teacher Info Card
-      pdf.setFillColor(...lightGray);
-      pdf.roundedRect(15, yPos - 5, pageWidth - 30, 25, 3, 3, 'F');
-      
-      pdf.setTextColor(...darkGray);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Teacher Information', 20, yPos + 5);
-      
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Name: ${evaluationData.teacher_name || 'Unknown'}`, 20, yPos + 12);
-      pdf.text(`Total Students Responded: ${evaluationData.total_students}`, 20, yPos + 18);
-      
-      // Status badge
-      const status = evaluationData.status;
-      const statusColor = status === 'active' ? successGreen : status === 'expired' ? errorRed : darkGray;
-      pdf.setFillColor(...statusColor);
-      pdf.roundedRect(120, yPos + 14, 30, 6, 2, 2, 'F');
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(9);
-      pdf.text(status.toUpperCase(), 122, yPos + 18);
-      
-      yPos += 35;
-      
-      // Overall Rating Card
-      pdf.setFillColor(...lightBlue);
-      pdf.roundedRect(15, yPos - 5, pageWidth - 30, 35, 3, 3, 'F');
-      
-      pdf.setTextColor(...darkGray);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Overall Rating', 20, yPos + 5);
-      
-      // Large rating number
-      pdf.setFontSize(28);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(...primaryBlue);
-      pdf.text(`${averageRating.toFixed(1)}`, 20, yPos + 20);
-      
-      pdf.setFontSize(12);
-      pdf.setTextColor(...darkGray);
-      pdf.text('/5.0', 35, yPos + 20);
-      
-      // Star rating visualization
-      const starY = yPos + 25;
-      for (let i = 1; i <= 5; i++) {
-        if (i <= Math.round(averageRating)) {
-          pdf.setTextColor(255, 193, 7); // Gold color
-          pdf.text('★', 60 + (i * 8), starY);
-        } else {
-          pdf.setTextColor(200, 200, 200); // Gray color
-          pdf.text('☆', 60 + (i * 8), starY);
-        }
+      // Validate data before proceeding
+      if (!evaluationData) {
+        throw new Error('No evaluation data available');
       }
       
-      yPos += 45;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let yPos = 20;
       
-      // Questions Analysis Header
-      pdf.setFillColor(...primaryBlue);
-      pdf.rect(15, yPos - 5, pageWidth - 30, 12, 'F');
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(14);
+      // Simple header
+      pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Question Analysis', 20, yPos + 3);
+      pdf.text('Faculty Evaluation Report - Dean View', 20, yPos);
+      yPos += 10;
       
+      // Teacher info
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Teacher: ${evaluationData.teacher_name || 'Unknown'}`, 20, yPos);
+      yPos += 8;
+      pdf.text(`Total Responses: ${evaluationData.total_students || 0}`, 20, yPos);
+      yPos += 8;
+      pdf.text(`Date: ${new Date().toLocaleDateString()}`, 20, yPos);
       yPos += 15;
       
-      // Questions
-      evaluationData.questions.forEach((question, index) => {
+      // Questions and Response Breakdown
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Questions and Response Breakdown:', 20, yPos);
+      yPos += 10;
+      
+      const safeQuestions = evaluationData.questions || [];
+      safeQuestions.forEach((question, index) => {
         // Check if we need a new page
-        if (yPos > pageHeight - 60) {
+        if (yPos > 240) {
           pdf.addPage();
           yPos = 20;
         }
         
-        // Question card background
-        pdf.setFillColor(250, 250, 250);
-        pdf.roundedRect(15, yPos - 3, pageWidth - 30, 45, 2, 2, 'F');
-        
-        // Question number circle
-        const avgRating = Number(question.average_rating ?? 0);
-        const circleColor = avgRating >= 4 ? successGreen : avgRating >= 3 ? warningOrange : errorRed;
-        pdf.setFillColor(...circleColor);
-        pdf.circle(25, yPos + 8, 8, 'F');
-        
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(`${index + 1}`, 22, yPos + 10);
-        
-        // Question text
-        pdf.setTextColor(...darkGray);
+        // Question number and text
         pdf.setFontSize(11);
-        pdf.setFont('helvetica', 'normal');
-        const questionLines = pdf.splitTextToSize(question.question_text, pageWidth - 70);
-        pdf.text(questionLines, 40, yPos + 5);
-        
-        // Rating display
-        pdf.setFontSize(16);
         pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(...primaryBlue);
-        pdf.text(`${avgRating.toFixed(1)}`, 40, yPos + 20);
+        pdf.text(`${index + 1}. ${question.question_text || 'Question not available'}`, 20, yPos);
+        yPos += 8;
         
+        // Total responses
         pdf.setFontSize(10);
-        pdf.setTextColor(...darkGray);
-        pdf.text('/5.0', 52, yPos + 20);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Total Responses: ${question.total_responses || 0}`, 25, yPos);
+        yPos += 6;
         
-        // Response count
-        pdf.setFontSize(9);
-        pdf.text(`(${question.total_responses} responses)`, 40, yPos + 25);
-        
-        // Rating breakdown bars
+        // Rating breakdown - how many respondents chose each rating
         if (question.ratings_breakdown) {
-          let barX = 40;
-          const barWidth = (pageWidth - 80) / 5;
-          const maxCount = Math.max(...Object.values(question.ratings_breakdown as any).map(Number));
-          
-          [5, 4, 3, 2, 1].forEach(rating => {
-            const count = (question.ratings_breakdown as any)[rating] || 0;
-            const percentage = question.total_responses > 0 ? (count / question.total_responses * 100) : 0;
-            const barHeight = maxCount > 0 ? (count / maxCount) * 10 : 0;
-            
-            // Bar color based on rating
-            const barColor = rating >= 4 ? successGreen : rating >= 3 ? warningOrange : errorRed;
-            pdf.setFillColor(...barColor);
-            
-            if (barHeight > 0) {
-              pdf.rect(barX, yPos + 35 - barHeight, barWidth - 2, barHeight, 'F');
-            }
-            
-            // Rating label
-            pdf.setTextColor(...darkGray);
-            pdf.setFontSize(8);
-            pdf.text(`${rating}★`, barX + 2, yPos + 38);
-            pdf.text(`${count}`, barX + 2, yPos + 42);
-            
-            barX += barWidth;
-          });
+          const breakdown = question.ratings_breakdown as any;
+          pdf.text(`5 (Excellent): ${breakdown[5] || 0} respondents`, 25, yPos);
+          yPos += 4;
+          pdf.text(`4 (Very Good): ${breakdown[4] || 0} respondents`, 25, yPos);
+          yPos += 4;
+          pdf.text(`3 (Good): ${breakdown[3] || 0} respondents`, 25, yPos);
+          yPos += 4;
+          pdf.text(`2 (Fair): ${breakdown[2] || 0} respondents`, 25, yPos);
+          yPos += 4;
+          pdf.text(`1 (Poor): ${breakdown[1] || 0} respondents`, 25, yPos);
+          yPos += 8;
+        } else {
+          yPos += 6;
         }
-        
-        yPos += 50;
       });
-      
-      // Footer
-      pdf.setFillColor(...lightGray);
-      pdf.rect(0, pageHeight - 15, pageWidth, 15, 'F');
-      pdf.setTextColor(...darkGray);
-      pdf.setFontSize(8);
-      pdf.text('Generated by HRMS - Faculty Evaluation System', 20, pageHeight - 8);
-      pdf.text(`Page 1 of ${pdf.internal.pages.length - 1}`, pageWidth - 40, pageHeight - 8);
       
       const filename = `dean_evaluation_report_${evaluationData.teacher_name || 'teacher'}_${Date.now()}.pdf`;
       pdf.save(filename);
-      console.log('✅ Enhanced PDF export completed!');
+      console.log('✅ Simple PDF export completed!');
       
     } catch (error: any) {
       console.error('Error generating PDF:', error);

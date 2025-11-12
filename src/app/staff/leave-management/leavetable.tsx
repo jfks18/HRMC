@@ -81,6 +81,7 @@ export default function LeaveTable() {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
+  const [leaveTypes, setLeaveTypes] = useState<Array<{id: number, type: string, credits: number}>>([]);
 
   const getRealStatus = (is_approve: number | null | undefined): string => {
     if (is_approve === null || typeof is_approve === 'undefined') return 'pending';
@@ -108,6 +109,31 @@ export default function LeaveTable() {
       const storedUserId = localStorage.getItem('userId');
       setUserId(storedUserId);
     }
+  }, []);
+
+  // Fetch leave types from API
+  useEffect(() => {
+    const fetchLeaveTypes = async () => {
+      try {
+        const response = await apiFetch('/api/proxy/leave_cred');
+        if (response.ok) {
+          const types = await response.json();
+          setLeaveTypes(types);
+        }
+      } catch (error) {
+        console.error('Error fetching leave types:', error);
+        // Fallback to default types if API fails
+        setLeaveTypes([
+          { id: 1, type: 'sick', credits: 15 },
+          { id: 2, type: 'vacation', credits: 15 },
+          { id: 3, type: 'personal', credits: 5 },
+          { id: 4, type: 'emergency', credits: 3 },
+          { id: 5, type: 'maternity', credits: 90 },
+          { id: 6, type: 'paternity', credits: 7 }
+        ]);
+      }
+    };
+    fetchLeaveTypes();
   }, []);
 
   // Fetch leave requests for the logged-in user
@@ -370,14 +396,10 @@ export default function LeaveTable() {
         show={showLeaveModal}
         title="Submit Leave Application"
         fields={[
-          { key: 'type', label: 'Leave Type', type: 'select', options: [
-            { value: 'sick', label: 'Sick Leave' },
-            { value: 'vacation', label: 'Vacation Leave' },
-            { value: 'personal', label: 'Personal Leave' },
-            { value: 'emergency', label: 'Emergency Leave' },
-            { value: 'maternity', label: 'Maternity Leave' },
-            { value: 'paternity', label: 'Paternity Leave' }
-          ]},
+          { key: 'type', label: 'Leave Type', type: 'select', options: leaveTypes.map(type => ({
+            value: type.type,
+            label: `${type.type.charAt(0).toUpperCase() + type.type.slice(1)} Leave (${type.credits} days)`
+          }))},
           { key: 'start_date', label: 'Start Date', type: 'date' },
           { key: 'end_date', label: 'End Date', type: 'date' },
           { key: 'reason', label: 'Reason', type: 'textarea' }

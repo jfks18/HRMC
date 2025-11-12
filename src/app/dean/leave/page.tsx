@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import TopBar from '../../components/TopBar';
 import SideNav from '../components/SideNav';
 import LeaveTable from './leavetable';
@@ -8,20 +8,43 @@ import GlobalModal, { GlobalModalField } from '../../components/GlobalModal';
 
 export default function LeavePage() {
   const [showModal, setShowModal] = useState(false);
+  const [leaveTypes, setLeaveTypes] = useState<Array<{id: number, type: string, credits: number}>>([]);
+
+  // Fetch leave types from API
+  useEffect(() => {
+    const fetchLeaveTypes = async () => {
+      try {
+        const { apiFetch } = await import('../../apiFetch');
+        const response = await apiFetch('/api/proxy/leave_cred');
+        if (response.ok) {
+          const types = await response.json();
+          setLeaveTypes(types);
+        }
+      } catch (error) {
+        console.error('Error fetching leave types:', error);
+        // Fallback to default types if API fails
+        setLeaveTypes([
+          { id: 1, type: 'sick', credits: 15 },
+          { id: 2, type: 'vacation', credits: 15 },
+          { id: 3, type: 'personal', credits: 5 },
+          { id: 4, type: 'emergency', credits: 3 },
+          { id: 5, type: 'maternity', credits: 90 },
+          { id: 6, type: 'paternity', credits: 7 }
+        ]);
+      }
+    };
+    fetchLeaveTypes();
+  }, []);
 
   const leaveFields: GlobalModalField[] = [
     { 
       key: 'type', 
       label: 'Leave Type', 
       type: 'select', 
-      options: [
-        { value: 'sick', label: 'Sick Leave' },
-        { value: 'vacation', label: 'Vacation' },
-        { value: 'personal', label: 'Personal Leave' },
-        { value: 'emergency', label: 'Emergency Leave' },
-        { value: 'maternity', label: 'Maternity Leave' },
-        { value: 'paternity', label: 'Paternity Leave' }
-      ]
+      options: leaveTypes.map(type => ({
+        value: type.type,
+        label: `${type.type.charAt(0).toUpperCase() + type.type.slice(1)} Leave (${type.credits} days)`
+      }))
     },
     { 
       key: 'start_date', 
