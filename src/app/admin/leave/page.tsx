@@ -53,7 +53,7 @@ export default function LeavePage() {
     },
     { 
       key: 'end_date', 
-      label: 'End Date', 
+      label: 'End Date (Auto-calculated for Maternity Leave)', 
       type: 'date'
     },
     { 
@@ -72,10 +72,19 @@ export default function LeavePage() {
         throw new Error('User ID not found. Please log in again.');
       }
 
+      // Auto-calculate end date for maternity leave (105 days)
+      let endDateValue = formData.end_date;
+      if (formData.type === 'maternity' && formData.start_date) {
+        const startDate = new Date(formData.start_date);
+        const calculatedEndDate = new Date(startDate);
+        calculatedEndDate.setDate(startDate.getDate() + 104); // 105 days total (start day + 104 additional days)
+        endDateValue = calculatedEndDate.toISOString().split('T')[0];
+      }
+
       // Calculate days between start and end date
       const startDate = new Date(formData.start_date);
-      const endDate = new Date(formData.end_date);
-      if (!formData.start_date || !formData.end_date) {
+      const endDate = new Date(endDateValue);
+      if (!formData.start_date || !endDateValue) {
         throw new Error('Please select both start and end dates.');
       }
       if (endDate < startDate) {
@@ -102,7 +111,7 @@ export default function LeavePage() {
         user_id: userId,
         type: formData.type,
         start_date: formData.start_date,
-        end_date: formData.end_date,
+        end_date: endDateValue, // Use calculated end date for maternity leave
         days: daysDifference,
         reason: formData.reason
       };

@@ -252,9 +252,18 @@ export default function LeaveTable() {
         return;
       }
 
+      // Auto-calculate end date for maternity leave (105 days)
+      let endDateValue = formData.end_date;
+      if (formData.type === 'maternity' && formData.start_date) {
+        const startDate = new Date(formData.start_date);
+        const calculatedEndDate = new Date(startDate);
+        calculatedEndDate.setDate(startDate.getDate() + 104); // 105 days total (start day + 104 additional days)
+        endDateValue = calculatedEndDate.toISOString().split('T')[0];
+      }
+
       // Validate dates: start and end must be present and end >= start
       const start = formData.start_date;
-      const end = formData.end_date;
+      const end = endDateValue;
       if (!start || !end) {
         alert('Please select both start and end dates for the leave.');
         return;
@@ -274,7 +283,7 @@ export default function LeaveTable() {
         user_id: userId,
         type: formData.type,
         start_date: formData.start_date,
-        end_date: formData.end_date,
+        end_date: endDateValue, // Use calculated end date for maternity leave
         reason: formData.reason
       };
 
@@ -401,7 +410,7 @@ export default function LeaveTable() {
             label: `${type.type.charAt(0).toUpperCase() + type.type.slice(1)} Leave (${type.credits} days)`
           }))},
           { key: 'start_date', label: 'Start Date', type: 'date' },
-          { key: 'end_date', label: 'End Date', type: 'date' },
+          { key: 'end_date', label: 'End Date (Auto-calculated for Maternity Leave)', type: 'date' },
           { key: 'reason', label: 'Reason', type: 'textarea' }
         ] as GlobalModalField[]}
         onClose={() => setShowLeaveModal(false)}
