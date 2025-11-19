@@ -205,16 +205,7 @@ const LeaveSummaryCard: React.FC<LeaveSummaryCardProps> = ({ className = "" }) =
                   >
                     <div className="d-flex justify-content-between align-items-center w-100 me-3">
                       <span className="fw-semibold">{userGroup.user_name}</span>
-                      <div className="d-flex gap-3">
-                        <small className="text-muted">
-                          <i className="bi bi-calendar-check me-1"></i>
-                          Used: {totalUsed}
-                        </small>
-                        <small className="text-muted">
-                          <i className="bi bi-calendar me-1"></i>
-                          Remaining: {totalRemaining}
-                        </small>
-                      </div>
+                      {/* Removed Used and Remaining numbers for cleaner header */}
                     </div>
                   </button>
                 </h2>
@@ -233,7 +224,7 @@ const LeaveSummaryCard: React.FC<LeaveSummaryCardProps> = ({ className = "" }) =
                                   {getTypeDisplayName(leaveType.leave_type)}
                                 </small>
                                 <small className="text-muted">
-                                  {leaveType.remaining_days} / {leaveType.total_credits}
+                                  {Math.max(0, leaveType.remaining_days)} / {leaveType.total_credits}
                                 </small>
                               </div>
                               
@@ -250,7 +241,7 @@ const LeaveSummaryCard: React.FC<LeaveSummaryCardProps> = ({ className = "" }) =
                               
                               {leaveType.used_days > 0 && (
                                 <small className="text-muted">
-                                  Used: {leaveType.used_days} days
+                                  Used: {leaveType.used_days}
                                 </small>
                               )}
                             </div>

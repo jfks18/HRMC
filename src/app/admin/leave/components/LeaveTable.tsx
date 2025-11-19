@@ -373,7 +373,12 @@ export default function LeaveTable() {
       header: 'End Date',
       render: (value) => formatDate(value)
     },
-  { key: 'days', header: 'Days', render: (_value: any, row: LeaveRequest) => computeDays(row.start_date, row.end_date, row.days as any) },
+  { key: 'days', header: '', render: (_value: any, row: LeaveRequest) => (
+    <>
+      <span>{computeDays(row.start_date, row.end_date, row.days as any)}</span>
+      <span className="vr mx-2" style={{ height: '24px', display: 'inline-block', verticalAlign: 'middle' }}></span>
+    </>
+  ) },
     { 
       key: 'reason', 
       header: 'Reason',
@@ -451,7 +456,7 @@ export default function LeaveTable() {
                 <div className="col-6 mt-3"><strong>Type</strong><div>{s.type}</div></div>
                 <div className="col-6 mt-3"><strong>Start Date</strong><div>{formatDate(s.start_date)}</div></div>
                 <div className="col-6 mt-3"><strong>End Date</strong><div>{formatDate(s.end_date)}</div></div>
-                <div className="col-12 mt-3"><strong>Days</strong><div>{s.days}</div></div>
+                <div className="col-12 mt-3"><div>{s.days}</div></div>
                 <div className="col-12 mt-3"><strong>Reason</strong><div>{s.reason}</div></div>
                 <div className="col-12 mt-3"><strong>Status</strong><div>{getRealStatus(s.is_approve)}</div></div>
               </div>

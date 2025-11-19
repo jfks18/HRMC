@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { apiFetch } from '../apiFetch';
 
 function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { studentId: string, teacherId?: string, teacherName?: string, evaluationId?: string }) {
+	const [alreadyAnsweredToday, setAlreadyAnsweredToday] = useState(false);
 	const router = useRouter();
 	const [questions, setQuestions] = useState<{ id: number; text: string }[]>([]);
 	const [responses, setResponses] = useState<(number|string)[]>([]);
@@ -19,19 +20,29 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 
 	useEffect(() => {
 		apiFetch('/api/proxy/evaluation_questions')
-				.then(res => res.json())
-				.then(data => {
+			.then(res => res.json())
+			.then(data => {
 				const mapped = data.map((q: any) => ({ id: q.id, text: q.question_text }));
 				setQuestions(mapped);
-				// For remarks questions (21,22,23) use '', for others use undefined
 				setResponses(mapped.map((q: any) => (q.id === 21 || q.id === 22 || q.id === 23) ? '' : undefined));
-				// Reset to first section when questions load
 				setCurrentSectionIndex(0);
-				// Reset locked questions
 				setLockedQuestions(new Set());
 			})
 			.catch(() => setQuestions([]));
-	}, []);
+
+		// Check if student already answered this evaluation today
+		if (studentId && evaluationId) {
+			apiFetch(`/api/evaluation_answers?student_id=${studentId}&evaluation_id=${evaluationId}`)
+				.then(res => res.json())
+				.then(data => {
+					// Assume data is an array of answers with a date field
+					const today = new Date().toISOString().slice(0, 10);
+					const already = Array.isArray(data) && data.some((ans: any) => ans.evaluation_id == evaluationId && ans.student_id == studentId && ans.date?.slice(0, 10) === today);
+					setAlreadyAnsweredToday(already);
+				})
+				.catch(() => setAlreadyAnsweredToday(false));
+		}
+	}, [studentId, evaluationId]);
 
 	// Cleanup countdown interval on unmount
 	useEffect(() => {
@@ -197,6 +208,20 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 	const goPrev = () => setCurrentSectionIndex(i => Math.max(0, i - 1));
 	const goNext = () => setCurrentSectionIndex(i => Math.min(orderedSections.length - 1, i + 1));
 
+	if (alreadyAnsweredToday) {
+		return (
+			<div style={{ maxWidth: 650, margin: "48px auto", background: "#f8fafc", padding: 0, borderRadius: 20, boxShadow: "0 4px 24px rgba(44,62,80,0.13)" }}>
+				<div style={{ background: "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "32px 32px 16px 32px" }}>
+					<h2 style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: "2rem", letterSpacing: 1 }}>Professor Evaluation</h2>
+				</div>
+				<div style={{ padding: "32px", textAlign: "center" }}>
+					<div style={{ color: '#e53935', fontWeight: 700, fontSize: '1.08rem', marginBottom: 24 }}>
+						You have already answered this evaluation today. Please try again tomorrow.
+					</div>
+				</div>
+			</div>
+		);
+	}
 	return (
 		<div style={{ maxWidth: 650, margin: "48px auto", background: "#f8fafc", padding: 0, borderRadius: 20, boxShadow: "0 4px 24px rgba(44,62,80,0.13)" }}>
 			<div style={{ background: "linear-gradient(90deg, #1976d2 0%, #90caf9 100%)", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "32px 32px 16px 32px" }}>
@@ -253,29 +278,24 @@ function EvaluationForm({ studentId, teacherId, teacherName, evaluationId }: { s
 													<>
 														<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
 															<label style={{ fontWeight: 600, color: "#1976d2" }}>{q.id === 21 ? 'Comments' : 'Remarks'}</label>
-															{lockedQuestions.has(idx) && (
-																<div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#e53935', fontSize: '0.9rem', fontWeight: 600 }}>
-																	<span>🔒</span> Locked
-																</div>
-															)}
+															{/* Comments/remarks are never locked */}
 														</div>
-														<textarea
-															value={typeof responses[idx] === 'string' ? responses[idx] : ''}
-															onChange={e => handleRemarksChange(idx, e.target.value)}
-															rows={3}
-															placeholder={q.id === 21 ? 'Write your comments about the faculty member here...' : 'Add your remarks here...'}
-															style={{ 
-																width: "100%", 
-																borderRadius: 8, 
-																border: "1px solid #90caf9", 
-																padding: 10, 
-																fontSize: "1.08rem",
-																backgroundColor: lockedQuestions.has(idx) ? '#f5f5f5' : '#fff',
-																cursor: lockedQuestions.has(idx) ? 'not-allowed' : 'text'
-															}}
-															disabled={lockedQuestions.has(idx)}
-															required
-														/>
+															<textarea
+																value={typeof responses[idx] === 'string' ? responses[idx] : ''}
+																onChange={e => handleRemarksChange(idx, e.target.value)}
+																rows={3}
+																placeholder={q.id === 21 ? 'Write your comments about the faculty member here...' : 'Add your remarks here...'}
+																style={{ 
+																	width: "100%", 
+																	borderRadius: 8, 
+																	border: "1px solid #90caf9", 
+																	padding: 10, 
+																	fontSize: "1.08rem",
+																	backgroundColor: '#fff',
+																	cursor: 'text'
+																}}
+																required
+															/>
 														{isIncomplete && <div style={{ color: '#e53935', fontWeight: 700, marginTop: 8 }}>Required</div>}
 													</>
 												) : (

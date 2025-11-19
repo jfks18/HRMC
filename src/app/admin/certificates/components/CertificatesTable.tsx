@@ -190,7 +190,7 @@ export default function CertificatesTable({ onStatsChange }: { onStatsChange?: (
                       </td>
                       <td>{request.purpose}</td>
                       <td>
-                        <div>{new Date(request.request_date).toLocaleDateString()}</div>
+                        <div>{new Date(request.request_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
                         <div className="text-muted small">
                           {new Date(request.request_date).toLocaleTimeString()}
                         </div>

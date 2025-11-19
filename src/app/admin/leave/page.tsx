@@ -43,7 +43,7 @@ export default function LeavePage() {
       type: 'select', 
       options: leaveTypes.map(type => ({
         value: type.type,
-        label: `${type.type.charAt(0).toUpperCase() + type.type.slice(1)} Leave (${type.credits} days)`
+        label: `${type.type.charAt(0).toUpperCase() + type.type.slice(1)} Leave (${type.credits})`
       }))
     },
     { 

@@ -15,15 +15,7 @@ function renderStars(count: number) {
 function formatDateToWords(dateStr: string) {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
-  const month = date.toLocaleDateString('en-US', { month: 'long' });
-  const day = date.getDate();
-  const year = date.getFullYear();
-  let hour = date.getHours();
-  const ampm = hour >= 12 ? 'pm' : 'am';
-  hour = hour % 12;
-  if (hour === 0) hour = 12;
-  return `${weekday}, ${month} ${day}, ${year} ${hour}${ampm}`;
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 export default function EvaluationTable({ filters }: { filters?: { query?: string; department?: string; status?: string } }) {
