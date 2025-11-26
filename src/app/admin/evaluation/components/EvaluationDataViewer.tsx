@@ -388,9 +388,6 @@ export default function EvaluationDataViewer({
                             <div className="fw-medium text-dark mb-2">
                               {index + 1}. {question.question_text}
                             </div>
-                            <div className="small text-muted">
-                              {question.total_responses} response{question.total_responses !== 1 ? 's' : ''}
-                            </div>
                           </div>
                           <div className="text-end">
                             <div className="d-flex flex-column align-items-end">

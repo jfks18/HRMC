@@ -10,7 +10,8 @@ import InteractiveCard from '../../components/InteractiveCard';
 const StaffDashboard = () => {
   const [userName, setUserName] = useState<string>("");
   const [leaveCredits, setLeaveCredits] = useState<number>(0);
-  const [evaluationCount, setEvaluationCount] = useState<number>(0);
+  const [totalLeaveCredits, setTotalLeaveCredits] = useState<number>(0);
+
   useEffect(() => {
     // Get user name
     try {
@@ -36,18 +37,31 @@ const StaffDashboard = () => {
     // Get leave credits
     const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
     if (uid) {
-      apiFetch(`/api/proxy/leave_balance/${uid}`)
-        .then(res => res.json())
-        .then(data => {
-          const total = Array.isArray(data) ? data.reduce((sum, l) => sum + (l.remaining_days || 0), 0) : 0;
-          setLeaveCredits(total);
-        });
-      // Get evaluation count
-      apiFetch(`/api/proxy/evaluation_answers?student_id=${uid}`)
-        .then(res => res.json())
-        .then(data => {
-          setEvaluationCount(Array.isArray(data) ? data.length : 0);
-        });
+      // Fetch leave credits and approved leave requests, then calculate
+      Promise.all([
+        apiFetch('/api/proxy/leave_cred').then(res => res.json()),
+        apiFetch(`/api/proxy/leave_request/user/${uid}`).then(res => res.json())
+      ]).then(([leaveCreds, leaveRequests]) => {
+        // Sum all leave credits
+        const totalCredits = Array.isArray(leaveCreds)
+          ? leaveCreds.reduce((sum, cred) => sum + (cred.credits || 0), 0)
+          : 0;
+        // Sum all approved leave days for the user
+        let usedDays = 0;
+        if (Array.isArray(leaveRequests)) {
+          leaveRequests.forEach(req => {
+            if (req.is_approve === 1) {
+              // Calculate days for each approved leave
+              const start = new Date(req.start_date);
+              const end = new Date(req.end_date);
+              const days = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+              usedDays += days > 0 ? days : 0;
+            }
+          });
+        }
+        setTotalLeaveCredits(totalCredits);
+        setLeaveCredits(Math.max(0, totalCredits - usedDays));
+      });
     }
   }, []);
 
@@ -59,10 +73,7 @@ const StaffDashboard = () => {
         <main className="container-fluid py-4">
                   <div className="row g-3 mb-4">
                     <div className="col-md-4">
-                      <DashboardCard title="Leave Credits" value={leaveCredits} icon="bi-calendar-check" subtitle="Remaining leave days" />
-                    </div>
-                    <div className="col-md-4">
-                      <DashboardCard title="Evaluations" value={evaluationCount} icon="bi-bar-chart" subtitle="Total evaluations" />
+                      <DashboardCard title="Leave Credits" value={leaveCredits} icon="bi-calendar-check" subtitle={`Total leave: ${totalLeaveCredits}`} />
                     </div>
                   </div>
                   <div className="d-flex flex-column align-items-center justify-content-center text-center perspective-1000" style={{ minHeight: '50vh' }}>

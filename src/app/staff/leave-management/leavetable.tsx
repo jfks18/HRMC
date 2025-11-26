@@ -228,15 +228,6 @@ export default function LeaveTable() {
               </div>
             </div>
             <div className="modal-footer">
-              <div className="me-auto">
-                {/* Only show approve/disapprove when status is pending or undefined */}
-                {(!s.status || s.status === 'pending' || s.status === undefined) && (
-                  <>
-                    <button type="button" className="btn btn-success me-2" onClick={() => handleApprove(true)}>Approve</button>
-                    <button type="button" className="btn btn-danger me-2" onClick={() => handleApprove(false)}>Disapprove</button>
-                  </>
-                )}
-              </div>
               <button type="button" className="btn btn-secondary" onClick={() => setSelectedLeave(null)}>Close</button>
             </div>
           </div>

@@ -26,6 +26,9 @@ export default function TopBar() {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -332,41 +335,74 @@ export default function TopBar() {
                       <form onSubmit={handlePasswordUpdate}>
                         <div className="mb-3">
                           <label htmlFor="currentPassword" className="form-label small fw-semibold">Current Password</label>
-                          <input
-                            type="password"
-                            className="form-control"
-                            id="currentPassword"
-                            value={passwordData.currentPassword}
-                            onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                            required
-                            style={{ borderRadius: '8px' }}
-                          />
+                          <div className="input-group">
+                            <input
+                              type={showCurrentPassword ? "text" : "password"}
+                              className="form-control"
+                              id="currentPassword"
+                              value={passwordData.currentPassword}
+                              onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                              required
+                              style={{ borderRadius: '8px' }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary"
+                              style={{ borderRadius: '8px' }}
+                              tabIndex={-1}
+                              onClick={() => setShowCurrentPassword(v => !v)}
+                            >
+                              <i className={`bi ${showCurrentPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                            </button>
+                          </div>
                         </div>
                         <div className="mb-3">
                           <label htmlFor="newPassword" className="form-label small fw-semibold">New Password</label>
-                          <input
-                            type="password"
-                            className="form-control"
-                            id="newPassword"
-                            value={passwordData.newPassword}
-                            onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                            required
-                            minLength={6}
-                            style={{ borderRadius: '8px' }}
-                          />
+                          <div className="input-group">
+                            <input
+                              type={showNewPassword ? "text" : "password"}
+                              className="form-control"
+                              id="newPassword"
+                              value={passwordData.newPassword}
+                              onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                              required
+                              minLength={6}
+                              style={{ borderRadius: '8px' }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary"
+                              style={{ borderRadius: '8px' }}
+                              tabIndex={-1}
+                              onClick={() => setShowNewPassword(v => !v)}
+                            >
+                              <i className={`bi ${showNewPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                            </button>
+                          </div>
                         </div>
                         <div className="mb-3">
                           <label htmlFor="confirmPassword" className="form-label small fw-semibold">Confirm New Password</label>
-                          <input
-                            type="password"
-                            className="form-control"
-                            id="confirmPassword"
-                            value={passwordData.confirmPassword}
-                            onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                            required
-                            minLength={6}
-                            style={{ borderRadius: '8px' }}
-                          />
+                          <div className="input-group">
+                            <input
+                              type={showConfirmPassword ? "text" : "password"}
+                              className="form-control"
+                              id="confirmPassword"
+                              value={passwordData.confirmPassword}
+                              onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                              required
+                              minLength={6}
+                              style={{ borderRadius: '8px' }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary"
+                              style={{ borderRadius: '8px' }}
+                              tabIndex={-1}
+                              onClick={() => setShowConfirmPassword(v => !v)}
+                            >
+                              <i className={`bi ${showConfirmPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                            </button>
+                          </div>
                         </div>
                         
                         {passwordError && (
