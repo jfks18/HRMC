@@ -380,15 +380,6 @@ export default function LeaveTable() {
     </>
   ) },
     { 
-      key: 'reason', 
-      header: 'Reason',
-      render: (value) => (
-        <span title={value} className="text-truncate d-inline-block" style={{ maxWidth: '200px' }}>
-          {value}
-        </span>
-      )
-    },
-    { 
       key: 'status', 
       header: 'Status',
       render: (value: any, row: LeaveRequest) => {

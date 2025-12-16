@@ -326,7 +326,6 @@ export default function LeaveTable() {
     { key: 'start_date', header: 'Start Date', render: (value) => formatDate(value) },
     { key: 'end_date', header: 'End Date', render: (value) => formatDate(value) },
   { key: 'days' as any, header: 'Days', render: (_v, row) => computeDays(row.start_date, row.end_date, (row as any).days) },
-    { key: 'reason', header: 'Reason', render: (value) => (<div style={{ maxWidth: '200px' }}>{value?.length > 50 ? `${value.substring(0, 50)}...` : value}</div>) },
   { key: 'status', header: 'Status', render: (_value, row) => getStatusBadge(getDisplayStatus(row)) },
     { key: 'actions' as keyof LeaveRequest, header: 'Actions', render: (_value, row) => (
   <div className="d-flex gap-2">

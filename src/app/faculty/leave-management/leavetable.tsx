@@ -243,15 +243,6 @@ export default function LeaveTable() {
       render: (value) => formatDate(value)
     },
     { 
-      key: 'reason', 
-      header: 'Reason',
-      render: (value) => (
-        <div style={{ maxWidth: '200px' }}>
-          {value?.length > 50 ? `${value.substring(0, 50)}...` : value}
-        </div>
-      )
-    },
-    { 
       key: 'status', 
       header: 'Status',
       render: (_value, row) => getStatusBadge(getDisplayStatus(row))

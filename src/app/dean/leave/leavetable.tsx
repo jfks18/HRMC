@@ -382,15 +382,6 @@ export default function LeaveTable() {
     },
   { key: 'days', header: 'Days', render: (value, row) => computeDays(row.start_date, row.end_date, (row as any).days) },
     { 
-      key: 'reason', 
-      header: 'Reason',
-      render: (value) => (
-        <span title={value} className="text-truncate d-inline-block" style={{ maxWidth: '200px' }}>
-          {value}
-        </span>
-      )
-    },
-    { 
       key: 'status', 
       header: 'Status',
       render: (_value, row) => getStatusBadge(getDisplayStatus(row))
