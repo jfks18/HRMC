@@ -55,8 +55,7 @@ const columns: TableColumn<AttendanceRecord>[] = [
   { key: 'date', header: 'Date', render: (value) => formatDateToWords(value) },
   { key: 'time_in', header: 'Time In', render: (value) => value ? formatTo12Hour(value) : 'N/A' },
   { key: 'time_out', header: 'Time Out', render: (value) => value ? formatTo12Hour(value) : 'Not yet' },
-  { key: 'status', header: 'Status', render: (value) => getStatusBadge(value) },
-  { key: 'late_minutes', header: 'Late Minutes', render: (value) => value && value > 0 ? `${value} min` : '-' }
+  { key: 'status', header: 'Status', render: (value) => getStatusBadge(value) }
 ];
 
 export default function AttendanceTable() {

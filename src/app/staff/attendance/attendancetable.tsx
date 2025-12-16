@@ -45,7 +45,6 @@ const columns: TableColumn<AttendanceRecord>[] = [
     const badge = cls === 'present' ? 'bg-success' : cls === 'absent' ? 'bg-danger' : cls === 'late' ? 'bg-warning text-dark' : 'bg-secondary';
     return <span className={`badge ${badge}`}>{value || '-'}</span>;
   } },
-  { key: 'late_minutes', header: 'Late Minutes', render: (value) => value && value > 0 ? `${value} min` : '-' },
   {
     key: 'actions' as keyof AttendanceRecord,
     header: 'Actions',

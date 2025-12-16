@@ -259,7 +259,14 @@ export default function LeaveTable() {
     {
       key: 'actions' as keyof LeaveRequest,
       header: 'Actions',
-      render: (_value, row) => (
+      render: (_value, row) => {
+
+        // check if the request is cancellable
+        const isWithin24hours = row.created_at
+        ? (Date.now() - new Date(row.created_at).getTime()) < 24 * 60 * 60 *1000
+        : false;
+        
+        return (
         <div className="d-flex gap-2">
           <button
             className="btn btn-sm btn-outline-primary"
@@ -281,7 +288,9 @@ export default function LeaveTable() {
             </button>
           )}
         </div>
-      )
+      );
+    }
+
     }
   ];
 

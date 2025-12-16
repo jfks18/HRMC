@@ -78,11 +78,6 @@ const columns: TableColumn<AttendanceRecord>[] = [
     key: 'status', 
     header: 'Status',
     render: (value) => getStatusBadge(value)
-  },
-  { 
-    key: 'late_minutes', 
-    header: 'Late Minutes',
-    render: (value) => value > 0 ? `${value} min` : '-'
   }
 ];
 
